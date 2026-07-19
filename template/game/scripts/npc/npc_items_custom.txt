@@ -1,0 +1,8 @@
+// Custom items. The file must exist even when empty.
+//
+// Two useful base classes:
+//   "item_lua"        — has a TypeScript class with real cast behavior
+//   "item_datadriven" — no code; something else reads its AbilityValues
+"DOTAAbilities"
+{
+}

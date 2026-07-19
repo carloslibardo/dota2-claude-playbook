@@ -1,0 +1,24 @@
+{
+    "compilerOptions": {
+        "rootDir": ".",
+        "outDir": "../../game/scripts/vscripts",
+        "target": "esnext",
+        "lib": ["esnext"],
+        "types": ["@moddota/dota-lua-types/normalized"],
+        "plugins": [{ "transform": "@moddota/dota-lua-types/transformer" }],
+        "moduleResolution": "node",
+        "strict": true
+    },
+    "tstl": {
+        "luaTarget": "JIT",
+        // sourceMapTraceback emits `__TS__SourceMapTraceBack(debug.getinfo(...))`
+        // at the top of EVERY output file. The retail macOS client strips the
+        // Lua `debug` library (tools mode keeps it), so with this on the whole
+        // addon dies at load on Mac retail — every module errors with
+        // "attempt to index global 'debug' (a nil value)" masked as
+        // "error in error handling". Seen live 2026-07-05. Keep OFF.
+        "sourceMapTraceback": false
+    },
+    "include": ["**/*.ts", "../common/**/*.d.ts"],
+    "exclude": ["**/__tests__/**"]
+}

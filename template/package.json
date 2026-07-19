@@ -1,0 +1,25 @@
+{
+    "name": "hello_arena",
+    "private": true,
+    "scripts": {
+        "postinstall": "node scripts/install.js",
+        "launch": "node scripts/launch.js",
+        "build": "run-p build:*",
+        "build:panorama": "tsc --project src/panorama/tsconfig.json",
+        "build:vscripts": "tstl --project src/vscripts/tsconfig.json",
+        "dev": "run-p dev:*",
+        "dev:panorama": "tsc --project src/panorama/tsconfig.json --watch",
+        "dev:vscripts": "tstl --project src/vscripts/tsconfig.json --watch",
+        "test": "vitest run"
+    },
+    "devDependencies": {
+        "@moddota/dota-lua-types": "^4.34.1",
+        "@moddota/find-steam-app": "^1.1.0",
+        "@moddota/panorama-types": "^1.30.0",
+        "fs-extra": "^9.0.0",
+        "npm-run-all": "^4.1.5",
+        "typescript": "5.5.2",
+        "typescript-to-lua": "^1.26.0",
+        "vitest": "^2.0.0"
+    }
+}

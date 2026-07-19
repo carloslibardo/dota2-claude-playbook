@@ -1,0 +1,19 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  build:
+    # ubuntu, with no Dota 2 anywhere in sight. `scripts/install.js` detects the
+    # missing Steam install and no-ops, so everything below still runs: this is
+    # real CI for a Valve game mod.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit -p src/vscripts/tsconfig.json
+      - run: bunx tsc --noEmit -p src/panorama/tsconfig.json
+      - run: bun run build
+      - run: bunx vitest run --passWithNoTests

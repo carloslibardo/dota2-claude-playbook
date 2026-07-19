@@ -1,0 +1,33 @@
+name: Release (Workshop publish)
+
+# Publishing a Dota custom game needs the Dota 2 Workshop Tools + a logged-in
+# Steam session — neither exists on GitHub-hosted runners. This workflow targets
+# a SELF-HOSTED Windows runner registered on the machine that has the tools.
+#
+# DISABLED by default (`if: false`). To enable:
+#   1. Do the first publish via the GUI to mint the Workshop item ID
+#      (see docs/PUBLISHING.md).
+#   2. Register a self-hosted runner on that Windows box with labels
+#      [self-hosted, windows, dota-tools].
+#   3. Add repo secrets: WORKSHOP_ID, STEAM_USER (the runner's Steam session
+#      must already be Steam-Guard-approved for that account).
+#   4. Verify scripts/publish.ps1 succeeds MANUALLY once, then set `if:` to true.
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    if: false # flip to true once a self-hosted dota-tools runner is registered
+    runs-on: [self-hosted, windows, dota-tools]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Build, cook, upload to Workshop
+        shell: pwsh
+        run: >
+          pwsh scripts/publish.ps1
+          -WorkshopId ${{ secrets.WORKSHOP_ID }}
+          -SteamUser ${{ secrets.STEAM_USER }}

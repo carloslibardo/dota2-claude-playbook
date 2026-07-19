@@ -1,0 +1,17 @@
+﻿// Localization keys are the ONLY place tooltips exist. A missing key does not
+// warn — the UI just renders the raw token ("#npc_dota_hero_windrunner"), so a
+// missing entry looks like a UI bug rather than a data one.
+"lang"
+{
+	"Language"		"English"
+	"Tokens"
+	{
+		"addon_game_name"							"Hello Arena"
+
+		// The loc key for an overridden hero is the BASE hero name.
+		"npc_dota_hero_windrunner"					"Archer"
+
+		"DOTA_Tooltip_ability_example_ability"				"Shoot Arrow"
+		"DOTA_Tooltip_ability_example_ability_Description"		"Fire a skillshot arrow that damages the first enemy hero it strikes."
+	}
+}

@@ -1,0 +1,24 @@
+<root>
+    <scripts>
+        <!-- One compiled .js per panel. Add a line here for each new panel;
+             they all share the single "Hud" CustomUIElement declared in
+             custom_ui_manifest.xml. -->
+        <include src="file://{resources}/scripts/custom_game/hud.js" />
+    </scripts>
+
+    <styles>
+        <include src="s2r://panorama/styles/dotastyles.css" />
+        <include src="file://{resources}/styles/custom_game/hud.css" />
+    </styles>
+
+    <!-- hittest="false" ALL THE WAY DOWN unless a panel genuinely needs clicks.
+         Children default to hittest="true", and a full-screen hittest panel
+         silently swallows every mouseover in the game — native ability and item
+         tooltips just stop appearing, with no error anywhere. -->
+    <Panel hittest="false" class="MainHud">
+        <Panel id="ScorePanel" class="Score" hittest="false">
+            <Label id="ScoreTitle" class="Score__Title" text="SCORE" hittest="false" />
+            <Panel id="ScoreRows" class="Score__Rows" hittest="false" />
+        </Panel>
+    </Panel>
+</root>

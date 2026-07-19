@@ -1,0 +1,29 @@
+"DOTAAbilities"
+{
+	// The key here must EXACTLY match the exported class name in
+	// src/vscripts/abilities/example_ability.ts, and ScriptFile must be that
+	// module's path relative to game/scripts/vscripts/ (no extension).
+	"example_ability"
+	{
+		"BaseClass"						"ability_lua"
+		"ScriptFile"					"abilities/example_ability"
+		"AbilityBehavior"				"DOTA_ABILITY_BEHAVIOR_POINT | DOTA_ABILITY_BEHAVIOR_IGNORE_BACKSWING"
+		"AbilityUnitTargetTeam"			"DOTA_UNIT_TARGET_TEAM_ENEMY"
+		"AbilityUnitTargetType"			"DOTA_UNIT_TARGET_HERO"
+		"AbilityTextureName"			"windrunner_powershot"
+		"AbilityCastRange"				"1500"
+		"AbilityCastPoint"				"0.2"
+		"AbilityCooldown"				"3.0"
+		"AbilityManaCost"				"0"
+		"MaxLevel"						"4"
+		// Read back in TypeScript with GetSpecialValueFor("damage"). Balance
+		// numbers belong here, not in code: a KV edit needs no recompile, and
+		// it is the same value the tooltip renders.
+		"AbilityValues"
+		{
+			"damage"					"100 150 200 250"
+			"speed"						"1800"
+			"range"						"1500"
+		}
+	}
+}

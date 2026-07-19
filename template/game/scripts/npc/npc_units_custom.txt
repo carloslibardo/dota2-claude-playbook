@@ -1,0 +1,8 @@
+// Custom non-hero units. The file must exist even when empty.
+//
+// If you add one: "BaseClass" is REQUIRED. Omit it and the entity class
+// resolves to NULL, so CreateUnitByName fails on every call with
+// "Cannot create an entity because entity class is NULL".
+"DOTAUnits"
+{
+}

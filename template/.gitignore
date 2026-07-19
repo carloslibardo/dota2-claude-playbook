@@ -1,0 +1,22 @@
+node_modules
+
+# Build outputs — NEVER commit these. `bun run build` regenerates them, and a
+# stale committed copy is worse than none (see playbook/04-landmines.md L10).
+/content/panorama/scripts/custom_game/**/*.js
+/game/scripts/vscripts/**/*.lua
+
+# Dota 2 / Source 2 cooked artifacts. `resourcecompiler` produces these next to
+# the sources; they are large, binary, and machine-specific.
+*.bin
+*.vcss_c
+*.vxml_c
+*.vtex_c
+*.vjs_c
+*.vpcf_c
+*.vmat_c
+*.vpk
+*.vmdl_c
+*.vmesh_c
+*.vsndevts_c
+*.vsnd_c
+panorama_debugger.cfg

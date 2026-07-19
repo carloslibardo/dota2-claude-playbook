@@ -1,0 +1,21 @@
+"AddonInfo"
+{
+	// Metadata the Dota 2 Workshop Tools and the publish flow read.
+	// "maps" and the MapSelectionGroups entry must name a real .vmap you
+	// created in Hammer (see template/README.md — the one step you cannot
+	// script).
+	"IsPlayable"		"1"
+	"DefaultMaxPlayers"	"10"
+	"MapSelectionGroups"
+	{
+		"0"
+		{
+			"name"		"Hello Arena"
+			"maps"		"hello_arena"
+		}
+	}
+	"maps"			"hello_arena"
+	// One team per player = free-for-all. Must match the FFA_TEAMS list in
+	// src/vscripts/GameMode.ts.
+	"TeamCount"		"10"
+}

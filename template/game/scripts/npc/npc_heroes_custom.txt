@@ -1,0 +1,22 @@
+// Base heroes overridden IN PLACE. Everything you do not restate is inherited
+// from the stock hero, so this file only lists the deltas.
+"DOTAHeroes"
+{
+	"npc_dota_hero_windrunner"
+	{
+		"override_hero"					"npc_dota_hero_windrunner"
+
+		// A skillshot-only mode: strip the right-click so all damage has to
+		// flow through abilities you control.
+		"AttackDamageMin"				"1"
+		"AttackDamageMax"				"1"
+		"AttackRate"					"2.0"
+
+		"Ability1"						"example_ability"
+		"Ability2"						""
+		"Ability3"						""
+		"Ability4"						""
+		"Ability5"						""
+		"Ability6"						""
+	}
+}
