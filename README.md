@@ -8,7 +8,7 @@ Three things live here:
 
 | | |
 |---|---|
-| **[`playbook/`](playbook/)** | Twelve chapters on the parts that are actually hard: the engine's silent failures, testing something CI cannot run, and what the process has to look like when an agent is doing the typing. |
+| **[`playbook/`](playbook/)** | Thirteen chapters on the parts that are actually hard: the engine's silent failures, testing something CI cannot run, and what the process has to look like when an agent is doing the typing. |
 | **[`template/`](template/)** | A ~35-file custom game that builds, tests, and passes CI with **no Dota installed**. Clone it, change one name, start writing your game. |
 | **[`testrig/`](testrig/)** | A GPU VM that plays your game for you, screenshots it, greps the log against a marker contract, ships back the evidence, and turns itself off. |
 
@@ -55,6 +55,11 @@ Then read [chapter 4](playbook/04-landmines.md) before you write anything.
 | 8 | [Publishing and its ceiling](playbook/08-publishing-ceiling.md) | Everything automates until it doesn't. Where exactly it stops, and why. |
 | 9 | [Research-first design](playbook/09-research-first-design.md) | Sourced-fact tagging and `DESIGN-FRESH`, so nobody has to guess which numbers were invented. |
 | 10 | [Working with Claude](playbook/10-working-with-claude.md) | What actually changed the output: the shape of the prompts. |
+| 11 | [The failure casebook](playbook/11-failure-casebook.md) | Fourteen failures as stories — symptom, quoted evidence, and the rule each one produced. |
+| 12 | [Mine your own story](playbook/12-mine-your-own-story.md) | Your transcripts hold your true numbers and your best material. How to extract both. |
+
+There is also [`article/`](article/) — the long-form write-up of the Archer Wars
+build itself, and the launch-post draft that goes with it.
 
 ## What is genuinely novel here
 
