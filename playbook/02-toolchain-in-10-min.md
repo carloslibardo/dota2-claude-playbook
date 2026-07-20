@@ -151,7 +151,7 @@ Because `install.js` no-ops, this workflow runs on a stock ubuntu runner:
 - run: bunx vitest run --passWithNoTests
 ```
 
-Four minutes, no GPU, no Steam, no Dota. It will not tell you the game is fun,
+A few minutes, no GPU, no Steam, no Dota. It will not tell you the game is fun,
 or that the projectile renders. It will tell you that every file typechecks
 against the real engine API, that Lua emit succeeds for the whole tree, and
 that your pure logic still behaves — which catches a large fraction of the
@@ -160,6 +160,15 @@ mistakes an agent actually makes.
 Two typecheck steps *and* a build step is deliberate. `tsc --noEmit` gives you
 clean, complete diagnostics; `tstl` gives you emit errors that `tsc` alone
 would not surface.
+
+One CI step worth adding later, once you have any generated-and-committed
+artifact — a map manifest, a balance table exported to JSON — is a **drift
+gate**: regenerate it and fail if the result differs from what is committed.
+It is cheap and it catches the whole class of "somebody edited the output
+instead of the source." Just be aware before you add it that a drift gate
+asserts your generator is deterministic on every machine that runs it, which
+stops being true the moment floating-point maths is involved. That is landmine
+L17 in [chapter 4](04-landmines.md), and it cost us a week of red CI.
 
 ## The runtime shims you get on day one
 

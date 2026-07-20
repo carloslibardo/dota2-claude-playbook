@@ -46,7 +46,7 @@ The bot subsystem ended up as four layers with strictly one-way data flow:
  world (Dota engine)
 ```
 
-Nineteen files, fourteen of them with test files next to them. The layers matter less than
+Twenty files, fourteen test files sitting beside them. The layers matter less than
 the line between them: **perception and executor are the only two layers that know Dota
 exists.** Everything in the middle is a function from plain data to plain data.
 
@@ -82,10 +82,10 @@ The two configs are complementary halves of one trick; without the exclusion you
 compile into the addon and your addon load breaks. See
 [chapter 5](05-testing-without-engine.md) for the full setup.
 
-The payoff, measured: the project's unit suite went 30 → 141 → 192 → **314 tests across 42
-files**, running on a Mac with Dota not installed. The bot engine alone landed with 92 tests
-green, then 109, then 117 after integration. Every one of those runs in seconds, in CI, on
-every push.
+The payoff, measured: the project's unit suite went 30 → 141 → 192 → 314 → **375 tests across
+47 files**, running on a Mac with Dota not installed. The bot engine alone landed with 92
+tests green, then 109, then 117 after integration. Every one of those runs in seconds, in CI,
+on every push.
 
 A useful way to decide whether a piece of logic belongs in the pure zone: ask what would have
 to be true for it to be wrong. If the answer is "the numbers are wrong" or "the state machine

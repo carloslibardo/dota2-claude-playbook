@@ -9,7 +9,7 @@ Three things live here:
 | | |
 |---|---|
 | **[`playbook/`](playbook/)** | Thirteen chapters on the parts that are actually hard: the engine's silent failures, testing something CI cannot run, and what the process has to look like when an agent is doing the typing. |
-| **[`template/`](template/)** | A ~35-file custom game that builds, tests, and passes CI with **no Dota installed**. Clone it, change one name, start writing your game. |
+| **[`template/`](template/)** | A ~50-file custom game — half of them one-line stubs the engine insists on — that builds, tests, and passes CI with **no Dota installed**. Clone it, change one name, start writing your game. |
 | **[`testrig/`](testrig/)** | A GPU VM that plays your game for you, screenshots it, greps the log against a marker contract, ships back the evidence, and turns itself off. |
 
 ## Who this is for
@@ -48,11 +48,11 @@ Then read [chapter 4](playbook/04-landmines.md) before you write anything.
 | 1 | [Why this is hard](playbook/01-why-this-is-hard.md) | The engine fails silently, and an agent cannot notice that a game feels wrong. |
 | 2 | [The toolchain in ten minutes](playbook/02-toolchain-in-10-min.md) | TypeScript → Lua, the symlink installer, and how you get real CI on a Valve game mod. |
 | 3 | [The SDD loop](playbook/03-sdd-loop.md) | spec → plan → **contract** → implement → **evidence** → **landmine**. The last three arrows are the ones missing elsewhere. |
-| 4 | [Landmines](playbook/04-landmines.md) | Sixteen failures with symptom, cause, and fix. Fourteen of them are silent. |
+| 4 | [Landmines](playbook/04-landmines.md) | Seventeen failures with symptom, cause, and fix. Fourteen of them are silent. |
 | 5 | [Testing without the engine](playbook/05-testing-without-engine.md) | The purity rule, the two-config trick, and why reading pixels is a real tier of testing. |
 | 6 | [The autonomous VM rig](playbook/06-autonomous-vm-rig.md) | How "play the game" becomes one command, and what it costs. |
 | 7 | [Bots you can unit-test](playbook/07-testable-bots.md) | The bots were the test rig, so the bots had to be more trustworthy than the game. |
-| 8 | [Publishing and its ceiling](playbook/08-publishing-ceiling.md) | Everything automates until it doesn't. Where exactly it stops, and why. |
+| 8 | [Publishing and its ceiling](playbook/08-publishing-ceiling.md) | Where automation actually stops — which turned out not to be where the documentation says it does. |
 | 9 | [Research-first design](playbook/09-research-first-design.md) | Sourced-fact tagging and `DESIGN-FRESH`, so nobody has to guess which numbers were invented. |
 | 10 | [Working with Claude](playbook/10-working-with-claude.md) | What actually changed the output: the shape of the prompts. |
 | 11 | [The failure casebook](playbook/11-failure-casebook.md) | Fourteen failures as stories — symptom, quoted evidence, and the rule each one produced. |
@@ -79,8 +79,9 @@ chapters are weighted accordingly.
 
 [Archer Wars](https://github.com/carloslibardo/archer-wars) is the full-scale
 reference: a ten-player skillshot free-for-all, seven classes, twenty items,
-a layered bot FSM with 117 unit tests, and a publish quality gate that casts
-every ability and buys every item on video before a release is allowed.
+a layered bot FSM with a unit test beside every decision module, and a publish
+quality gate that casts every ability and buys every item on video before a
+release is allowed.
 
 Three things there are worth reading directly:
 

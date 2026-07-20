@@ -3,10 +3,11 @@
 Everything so far has been about the code and the rig. This chapter is about the other half of
 the system: you.
 
-Over eleven days the human wrote roughly 250 typed prompts, and the agent executed a little
-over 2,500 tool calls in response — roughly eight agent actions per human sentence. (The exact
-numbers, and why two different counts of them both exist, are in
-[chapter 12](12-mine-your-own-story.md).) At that leverage ratio, the shape of your prompts is
+Over eleven days the human wrote **306** typed prompts, and the agent executed **2,576** tool
+calls in response — roughly eight agent actions per human sentence. (A later, deeper sweep
+puts the prompt count nearer 250; why two defensible counts of the same thing exist, and how
+to derive either, is [chapter 12](12-mine-your-own-story.md) §12.5.) At that leverage ratio,
+the shape of your prompts is
 not a stylistic matter. It is the highest-order variable in the project. A prompt that sends
 the agent down a productive path buys you eight useful actions; a vague one buys you eight
 wasted ones and a wall of text to read.
@@ -290,7 +291,7 @@ The Archer Wars `CLAUDE.md` has a section headed, verbatim:
 
 > ## Architecture invariants (violating these caused real crashes)
 
-and it lists four, each stated as a rule with the reason attached:
+and it lists five, each stated as a rule with the reason attached:
 
 - Archers **are** base heroes overridden in place — custom `npc_dota_hero_*_custom` names
   never spawn, so `GetUnitName()` returns the base name and any hero-keyed dispatch must key
@@ -300,6 +301,7 @@ and it lists four, each stated as a rule with the reason attached:
 - Resolve bot heroes via `heroForPlayer()`, not `PlayerResource.GetSelectedHeroEntity` — fake
   clients get heroes *assigned*, not *selected*.
 - Skillshot-only: all damage flows through the arrow hit pipeline.
+- The bot harness is convar-driven — one shipping binary, mode selected at launch.
 
 Every one of those is a scar. Each cost hours. Each is the kind of thing an agent starting
 fresh will re-derive incorrectly, because in every case the *wrong* approach is the one the
@@ -311,9 +313,9 @@ Three observations from living with this file:
 is a much stronger instruction than "Notes." It tells the reader that deviation is not a style
 disagreement.
 
-**Keep it short enough to stay read.** Four invariants, three commands, one table of where code
-lives, one testing strategy. This file is loaded into every session; every line you add
-competes with every other line.
+**Keep it short enough to stay read.** Five invariants, one block of commands, one table of
+where code lives, one testing strategy. This file is loaded into every session; every line you
+add competes with every other line.
 
 **Keep it honest, and re-check it.** During the playbook work we found that one invariant had
 been simplified past correctness: `CLAUDE.md` says "always fake clients, never bot_populate,"

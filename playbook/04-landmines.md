@@ -1,7 +1,7 @@
 # 4. Landmines
 
-Sixteen things that cost real days, with the symptom you will actually see, the
-cause, and the fix.
+Seventeen things that cost real days, with the symptom you will actually see,
+the cause, and the fix.
 
 They share a shape. Almost none of them produce an error at the place where the
 mistake is. The Dota 2 engine's dominant failure mode is **silence**: a wrong
@@ -119,8 +119,9 @@ L6), and real-lobby bot fill uses `AddBotPlayerWithEntityScript` (seated at
 
 ## L5 — bots have neither a selected nor an assigned hero
 
-**Symptom.** Your bot driver logs "driving 0 bots" for an entire match that
-visibly plays fine — the bots move, shoot, kill each other, and score.
+**Symptom.** Your bot driver logs `[E2E] driving 0 archer(s)` — or whatever your
+equivalent marker is — for an entire match that visibly plays fine: the bots
+move, shoot, kill each other, and score.
 
 **Cause.** `PlayerResource.GetSelectedHeroEntity()` returns nil for bots. They
 are seated after selection closes and get their hero from `CreateHeroForPlayer`,
@@ -410,9 +411,65 @@ warning you leave unexplained is a standing invitation to break something.
 
 ---
 
+## L17 — your drift gate will fail on floating-point, across architectures
+
+**Symptom.** A committed generated artifact — ours was `arena.json`, exported
+from a TypeScript constant and checked by CI for drift — passes locally and
+fails in CI on every single run. Regenerating it locally produces a file
+identical to the one already committed. The CI diff is one digit, in the last
+place:
+
+```
+-1456.2305898749055     (committed, generated on the dev machine)
+-1456.2305898749057     (regenerated in CI)
+```
+
+CI stayed red from July 12 to July 19 on this alone.
+
+**Cause.** The dev machine is ARM and the CI runner is x64, and their `libm`
+trig functions differ by **1 ULP** on some inputs. The arena's spawn ring is
+computed with `sin`/`cos`, so the exported coordinates land one unit-in-the-last-place
+apart depending on which CPU family ran the exporter. Neither result is wrong.
+IEEE 754 does not require `sin` and `cos` to be correctly rounded, so it does
+not require two platforms to agree.
+
+**Fix.** Round at the export boundary, and — the part that matters — make the
+exporter and the test that checks it share **one** rounding function:
+
+```ts
+/**
+ * 4-decimal round shared by the arena.json exporter and its contract test.
+ * Ring-slot trig differs by 1 ULP between ARM libm (where arena.json gets
+ * committed) and CI's x64 libm — enough to trip the drift gate on values
+ * like -1456.2305898749055 vs ...057.
+ */
+export function roundForExport(value: number): number {
+    return Math.round(value * 1e4) / 1e4;
+}
+```
+
+Pick a precision far below any tolerance that matters — 0.0001 Hammer units is
+nothing geometrically — and export through it everywhere.
+
+Two traps inside the fix. If the exporter rounds and the test recomputes from
+raw constants, you have moved the mismatch rather than removed it, so the
+rounder must be imported by both. And rounding *display* while committing raw
+values does nothing at all; the round has to happen before serialization.
+
+**The general rule.** Any CI gate that compares a regenerated artifact against a
+committed one is implicitly asserting that generation is deterministic across
+every machine that will ever run it. The moment floating-point maths is
+involved, that assertion is false unless you make it true. Quantize
+deterministically at the boundary — this is the same class of problem as
+checksums over serialized floats, and the same fix.
+
+*Observed live 2026-07-12 through 07-19 (archer-wars PR #21).*
+
+---
+
 ## The pattern
 
-Fourteen of these sixteen fail silently or report the wrong thing. That is the
+Fourteen of these seventeen fail silently or report the wrong thing. That is the
 single most important fact about this engine, and it has a direct consequence
 for how you work:
 

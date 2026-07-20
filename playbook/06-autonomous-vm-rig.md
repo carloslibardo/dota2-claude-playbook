@@ -29,8 +29,9 @@ Then:
 9. Prints a summary.
 10. **Stops the VM.**
 
-You get a PASS or a FAIL and the evidence to argue with it. Twenty minutes,
-about a dollar.
+You get a PASS or a FAIL and the evidence to argue with it. About twenty-five
+minutes end to end — three for a cold boot, ten to sync and compile, thirteen
+for the match itself — and roughly a dollar.
 
 ## Why a VM at all
 

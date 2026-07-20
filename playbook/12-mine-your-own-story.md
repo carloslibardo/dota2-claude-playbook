@@ -22,10 +22,10 @@ Claude Code writes one JSONL file per session under:
 ```
 
 The slug is the working directory with slashes replaced by dashes. A session started in
-`~/carlos/projects/archer-wars` lands in:
+`/Users/you/projects/archer-wars` lands in:
 
 ```
-~/.claude/projects/-Users-libardo-carlos-projects-archer-wars/
+~/.claude/projects/-Users-you-projects-archer-wars/
 ```
 
 Here is the trap, and it is the single most important methodological point in this chapter:
@@ -39,7 +39,7 @@ consequence: **74 sessions in the playground directory reference `archer_wars`**
 them are the *primary* build sessions — one 73 MB file spanning July 4 to July 11, and one
 117 MB file spanning July 8 to July 13.
 
-If you reconstruct this project's history from `-Users-libardo-carlos-projects-archer-wars/`
+If you reconstruct this project's history from `-Users-you-projects-archer-wars/`
 alone, you find a hole from July 9 to July 12. That hole contains the quality-gate era, the
 showcase work, the three rejected evidence deliverables and the "camera never moved" incident —
 which is to say, it contains most of this playbook.
@@ -61,9 +61,13 @@ distinctive function name. Then decide deliberately which of those directories a
 and say which ones in your writeup. This is the difference between "we counted the transcripts"
 and "we counted some of the transcripts."
 
-Scale, for calibration: the Archer Wars corpus was roughly 103 MB across 23 JSONL files in the
-archer-wars directories, plus about 190 MB in the two primary playground sessions. Around 36
-sessions in one place and 74 in the other. These files are big and they are all plain text.
+Scale, for calibration: at the time of the sweep the Archer Wars corpus was roughly 103 MB
+across 23 JSONL files in the archer-wars directories, plus about 190 MB in the two primary
+playground sessions — 36 sessions in one place and 74 in the other. (The classifier below
+reports 33 rather than 36 for the same directories: it only counts sessions that contain at
+least one user-role record. Every number in this chapter is a measurement of a live, growing
+directory, which is exactly why each one needs a date on it.) These files are big and they are
+all plain text.
 
 ## 12.2 JSONL anatomy
 
@@ -109,13 +113,13 @@ filters change the answer.
 
 ```bash
 cd ~/.claude/projects && \
-for d in -Users-libardo-carlos-projects-archer-wars \
-         -Users-libardo-carlos-projects-archer-wars--claude-worktrees-bot-engine; do
+for d in -Users-you-projects-archer-wars \
+         -Users-you-projects-archer-wars--claude-worktrees-bot-engine; do
   echo "== $d"; cat $d/*.jsonl 2>/dev/null | grep -c '"type":"user"'
 done
 # then filter tool_result + isMeta:
-cat -- -Users-libardo-carlos-projects-archer-wars/*.jsonl \
-       -Users-libardo-carlos-projects-archer-wars--claude-worktrees-bot-engine/*.jsonl \
+cat -- -Users-you-projects-archer-wars/*.jsonl \
+       -Users-you-projects-archer-wars--claude-worktrees-bot-engine/*.jsonl \
 | python3 -c "
 import sys, json
 n=0
@@ -137,7 +141,7 @@ prompts.
 reports every bucket, so you can see what you excluded and defend it later:
 
 ```bash
-cat ~/.claude/projects/-Users-libardo-carlos-projects-archer-wars*/*.jsonl | python3 -c "
+cat ~/.claude/projects/-Users-you-projects-archer-wars*/*.jsonl | python3 -c "
 import sys, json
 real=0; cmd=0; interrupt=0; toolres=0; meta=0
 sessions=set()
@@ -165,7 +169,7 @@ real=306 cmd=60 interrupt=0 toolres=2576 meta=70 sessions=33
 **Step 3 — the agent's side:**
 
 ```bash
-cat ~/.claude/projects/-Users-libardo-carlos-projects-archer-wars*/*.jsonl | python3 -c "
+cat ~/.claude/projects/-Users-you-projects-archer-wars*/*.jsonl | python3 -c "
 import sys, json
 a=0; tools=0
 for line in sys.stdin:
@@ -188,8 +192,20 @@ Note `tool_calls == toolres == 2576`. The two independent counts agree, which is
 that the classifier is bucketing correctly.
 
 A related sweep worth running is the tool-type histogram, because it characterizes your project
-in one line. Across the archer-wars directories: **2,721 tool calls — Bash 1,536, Read 335,
-Edit 256, Agent 75, Write 65, SendMessage 33, AskUserQuestion 26.** Bash dominance at that ratio
+in one line. A later pass over the archer-wars directories broke the calls down as
+**Bash 1,536, Read 335, Edit 256, Agent 75, Write 65, SendMessage 33, AskUserQuestion 26**, out
+of **2,721** total.
+
+That total is not the 2,576 above, and the honest answer is that we cannot fully attribute the
+gap: the two sweeps were run four days apart — July 15 and July 19 — over a corpus that was
+still being written, by different scripts (the Python classifier above versus a `jq` pass). The
+directory held 23 transcript files at the first count and thirty by the second, so at least
+some of the difference is simply more sessions. Take the lesson rather than the number: **stamp
+every count with the date and the script that produced it**, or you will find yourself unable
+to reconcile your own figures a week later. The 2,576 is the one that shipped, because it
+cross-checks against the `tool_result` count; the histogram is here for its shape, not its sum.
+
+Bash dominance at that ratio
 is the signature of an infrastructure-heavy project: VM control, ssh, ffmpeg, git. A web app
 would show Edit and Read on top. Your histogram tells a reader what kind of work this really
 was, without you having to characterize it.
@@ -248,7 +264,7 @@ does not get to pick a convenient single truth.
 ### Prompts: 306 versus ~249
 
 **306** is what the classifier reported in the launch-post session (July 15). It swept the
-`~/.claude/projects/-Users-libardo-carlos-projects-archer-wars*` directories — the main project
+`~/.claude/projects/-Users-you-projects-archer-wars*` directories — the main project
 directory plus the bot-engine worktree directory — across 33 sessions, excluding tool results,
 meta records and slash-command wrappers.
 

@@ -95,7 +95,7 @@ But the plan's *Global Constraints* section is the star. It contained, among oth
 
 Task 1 of the plan is literally *"extend `vitest.config.ts`, write `vec.ts`, write its failing test."* TDD ordering baked into the document the agent executes.
 
-The payoff: `src/vscripts/bots/` is 19 files with 14 test files beside them, and the entire decision layer runs on my Mac in milliseconds with Dota nowhere in sight. The engine-facing layer stays thin — it translates world state into plain data going in, and decisions into orders going out. That's the part you can't unit-test, so you keep it as small as you can and cover it downstream with the VM.
+The payoff: `src/vscripts/bots/` is 20 files with 14 test files beside them, and the entire decision layer runs on my Mac in milliseconds with Dota nowhere in sight. The engine-facing layer stays thin — it translates world state into plain data going in, and decisions into orders going out. That's the part you can't unit-test, so you keep it as small as you can and cover it downstream with the VM.
 
 That trick has two halves that have to agree: `src/vscripts/tsconfig.json` has `"exclude": ["**/__tests__/**"]` so test files never become Lua, and `vitest.config.ts` includes exactly those directories. Complementary halves of one idea.
 
@@ -130,7 +130,7 @@ I'm not embarrassed by that ratio, I think it *is* the deliverable. Every one of
 
 There are more — day/night cycle rendering matches near-black while fog-honest bots used night vision radii (nine bots, four minutes, zero kills, fixed with a permanent `SetTimeOfDay(0.5)` timer); `ffmpeg` eating stdin inside a `while read` loop and mangling every output directory name until `-nostdin`; stock engine particles that were renamed years ago and now fail to load in complete silence.
 
-My favourite comedy arc is three commits long. A scout ward "spawned invisible" (`cca05dd`), was fixed into a "**visible** scout hawk" (`eb69475`), and a grapple hook that fired and hit but never pulled got fixed *twice* — once by rewriting the pull to run on an interval-think instead of a motion controller, and once more before it became a "real Pudge-style hook reel" (`0a393bb`). The pull existed only in the tooltip for two shipped versions.
+My favourite comedy arc is three commits long, and the joke is that one of them is deliberate. A scout ward was built to spawn *invisible* on purpose (`cca05dd`) — a ward you can't see is the whole point — one commit after a scout hawk had to be fixed into a "**visible** scout hawk" (`eb69475`) because that one's invisibility was an accident. Then a grapple hook that fired and hit but never pulled got fixed *twice* — once by rewriting the pull to run on an interval-think instead of a motion controller, and once more before it became a "real Pudge-style hook reel" (`0a393bb`). The pull existed only in the tooltip for two shipped versions.
 
 And a spawn probe I added *to diagnose* the spawning problem crashed the addon at load, and had to be removed 63 minutes later (`3dad410` → `5c2ca61`). The instrument broke the experiment.
 
@@ -169,9 +169,11 @@ On top of that sits a **quality gate**: before publishing, a staged sweep casts 
 
 And then the agent told me a gameplay video was delivered and verified.
 
-It wasn't. The camera never moved for the entire match. Nine bots fought across the whole arena while the recording stared at an empty patch of map centre for fifteen minutes. The agent had confirmed the run succeeded — parsed the log, found the markers, counted the kills, saw no script errors — and reported success. Every claim it made about the *logs* was true. It had never looked at a single pixel.
+It wasn't. The camera never moved for the entire match. Nine bots fought across the whole arena while the recording stared at an empty patch of map centre. The agent had confirmed the run succeeded — parsed the log, found the markers, counted the kills, saw no script errors — and reported success. Every claim it made about the *logs* was true. It had never looked at a single pixel.
 
-Root cause was a good one: `PlayerResource.SetCameraTarget(0, unit)` is **inert** for the tools recording host. It returns without complaint and does nothing. The camera director had to move into Panorama instead — the server-side code publishes the hottest fight cluster's centroid to a net table, and a client-side script reads it and calls `GameUI.SetCameraPositionFromLateralLookAtPosition(x, y)`. Frame the *centroid of a cluster*, not one hero's exact position, and re-aim slowly, or the camera snaps onto a lone hero standing in an empty field.
+The root cause took two attempts, and getting it wrong the first time is the more useful half of the story. Initial diagnosis: `PlayerResource.SetCameraTarget(0, unit)` looked **inert** for the tools recording host — it returns without complaint and appeared to do nothing — so the camera director moved into Panorama, with the server publishing the hottest fight cluster's centroid to a net table and a client script calling `GameUI.SetCameraPositionFromLateralLookAtPosition(x, y)`. That route *also* left the frames on empty field, in the July 11th showcase run, while the labels cycled cheerfully over nothing. What finally moved the camera was going back to server-side `SetCameraTarget`, locked onto the acting hero. Two plausible fixes, one of them wrong, and the only thing that could tell them apart was looking at the frames.
+
+One piece of the first attempt survived and is worth keeping: frame the *centroid of a cluster*, not one hero's exact position, and re-aim slowly — otherwise the camera snaps onto a lone hero standing in an empty field, which is its own way of filming nothing.
 
 But the fix isn't the lesson. The lesson is the rule that came out of it:
 
@@ -252,7 +254,7 @@ I said "318 commits" in the launch thread. Counting properly afterwards: **274 c
 
 Two more corrections in the same spirit:
 
-- The repo's gross diff reads **+625,742 lines**, which is nonsense as a measure of work: a single generated Hammer map seed accounts for 571,739 of it. The human-scale figure is roughly **+54,000 / −4,300**, and that still includes docs, plans, KV files and tests.
+- The repo's gross diff reads **+625,742 lines**, which is nonsense as a measure of work: a single generated Hammer map seed accounts for 571,739 of it. Excluding that one file — `git log main --numstat -- . ':(exclude)mapgen/seed/seed.vmap.txt'` — the real figure is **+48,586 / −4,170**, and that still includes docs, plans, KV files and tests.
 - "About six hours of hands-on time" is my own estimate of time spent typing and reviewing, not an instrumented measurement. Wall-clock was about eight and a half active days across July 4–13. The gap between those two numbers is almost entirely the agent↔VM loop — push, wait for bots to play a full match, watch the recording, feed it back. That's the honest shape of it: the work was fast, the *verification* was slow, and the verification is what made the work trustworthy.
 
 While we're being precise about the shape of the thing: the busiest day was July 5th with **121 commits**, 25 of them in the 04:00 hour alone — that's the bot engine. July 9th is the only heavy-deletion day in the whole history (−1,614), because I playtested the terrain I'd spent two days building and concluded a flat clearing plays better:
@@ -267,15 +269,15 @@ Building the thing is cheap now. Deciding what to delete is still the job.
 
 The code above is a game about archers. The transferable part is everything around it, which is what I've pulled out into [**dota2-claude-playbook**](https://github.com/carloslibardo/dota2-claude-playbook):
 
-- **`dota-ts-arena-template`** — the ~35-file boilerplate. TypeScript→Lua, Panorama, symlink installer, working CI that runs with no Dota installed, one example ability, one panel, one pure lib with its test, and a convar-gated e2e stub that emits `[E2E]` markers. `bun install && bun run build && bun run test` green on a Mac.
+- **`dota-ts-arena-template`** — the ~50-file boilerplate, half of which are the near-empty KV and manifest stubs the engine refuses to start without. TypeScript→Lua, Panorama, symlink installer, working CI that runs with no Dota installed, one example ability, one panel, one pure lib with its test, and a convar-gated e2e stub that emits `[E2E]` markers. `bun install && bun run build && bun run test` green on a Mac.
 - **A templated `CLAUDE.md`** with the structure that made the difference — Commands / Where code lives / **Architecture invariants (violating these caused real crashes)** / Testing strategy / Conventions — with the Dota-generic invariants pre-filled.
 - **The landmines chapter.** Everything in the failure museum above, in full, with the fix and the date it bit me.
 - **The SDD loop**, with the three real spec→plan→evidence examples from this project, including the one whose acceptance criterion is *frame review*.
 - **`dota-vm-testrig`** — the GPU VM scripts, parametrized: IAP-tunnelled SSH, the interactive-session scheduled task, the convar-gated headless mode, a pluggable `[MARKER]` log contract, screenshot/video capture, scp-back-and-stop.
 - **Testing without the engine** — the purity rule and the dual-compilation trick that let a bot FSM be unit-tested on a machine that cannot run the game.
-- **Publishing and its ceiling**, stated plainly: Valve ships no headless publish. The first publish is a GUI button, full stop. Updates are semi-automatable via `steamcmd` (community-validated, not Valve-documented — validate one manual run before you trust it), and a tag→release pipeline needs a self-hosted Windows runner with a persistent Steam session. Knowing where automation stops is worth as much as the parts that automate.
+- **Publishing and its ceiling**, including the part where I had the ceiling in the wrong place. Every source I found — Valve's docs, community writeups, and the first draft of my own chapter — says the first publish must go through the Workshop Tools GUI, because only the GUI can create an item. That's wrong: a `.vdf` with `publishedfileid 0` handed to `steamcmd +workshop_build_item` creates the item headless, over SSH, from the same VM that runs the playtests. What's genuinely still manual is a Steam-Guard-approved cached login, accepting the Workshop Legal Agreement, and flipping the item from hidden to public. The `steamcmd` path stays community-validated rather than Valve-documented, so validate one run by hand before you trust it. Knowing where automation stops is worth as much as the parts that automate — and it's worth re-checking, because I'd inherited that claim instead of testing it.
 
-The game itself is at [**github.com/carloslibardo/archer-wars**](https://github.com/carloslibardo/archer-wars) — the full-scale worked example, fixes and all. It's getting published as an official custom game. When it's live, you're invited. 20 kills to win.
+The game itself is at [**github.com/carloslibardo/archer-wars**](https://github.com/carloslibardo/archer-wars) — the full-scale worked example, fixes and all. The Workshop item exists as of July 19th, sitting hidden while I confirm the legal agreement and give it one more pass. When I flip it public, you're invited. 20 kills to win.
 
 If one thing survives from this piece, make it the two-column table. Every surprise you hit is a failure on the left and a rule on the right, and the rule is only worth anything if you write it down where the agent will read it next time.
 

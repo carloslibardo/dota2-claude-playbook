@@ -14,11 +14,11 @@ Four tiers, each answering a question the one below it cannot.
 | Tier | Runs on | Answers | Cost |
 |---|---|---|---|
 | 1. Unit | any laptop, CI | Is the decision logic right? | seconds |
-| 2. Headless e2e | Windows GPU VM | Does the game actually run? | ~20 min, real money |
+| 2. Headless e2e | Windows GPU VM | Does the game actually run? | ~25 min end to end, real money |
 | 3. Manual playtest | your machine + Dota | Is it any good? | your evening |
 | 4. Evidence review | frames from tier 2 | Can the player *see* it? | minutes, after tier 2 |
 
-Archer Wars runs about 117 unit tests across 32 files at tier 1. That number is
+Archer Wars finished at 375 unit tests across 47 files at tier 1. That number is
 not an accident of diligence; it is the direct result of one architectural rule.
 
 ## The purity rule
@@ -211,8 +211,10 @@ inert in a real match.** `IsInToolsMode()` plus a convar check, both, at the
 entry point. The harness must never be able to affect a game a human is playing.
 
 Tier 2 catches all the load-order and resolution failures — the ones tier 1
-structurally cannot see. It runs in about twenty minutes and costs real money,
-so it is not a per-commit gate; it is a per-feature and pre-release gate.
+structurally cannot see. End to end it runs about twenty-five minutes — roughly
+three for a cold VM boot, ten to sync and compile, thirteen for the recorded
+match — and it costs real money, so it is not a per-commit gate; it is a
+per-feature and pre-release gate.
 
 ## Tier 4 — evidence review
 
@@ -254,7 +256,7 @@ design rather than a coincidence.
 
 ```
 every commit         tier 1     seconds, free
-every feature        tier 2     ~20 min, GPU VM
+every feature        tier 2     ~25 min, GPU VM
 anything visual      tier 4     minutes, on top of tier 2
 before you believe   tier 3     an evening, a human
   the game is good
@@ -262,6 +264,6 @@ before you believe   tier 3     an evening, a human
 
 The rule that governs all of it: **make the testable region as large as you
 can, on purpose, and be honest about where it ends.** A codebase with a clean
-purity boundary gets 117 fast tests. The same codebase written without that
-boundary gets zero, and every one of those 117 assertions becomes something a
+purity boundary gets 375 fast tests. The same codebase written without that
+boundary gets zero, and every one of those 375 assertions becomes something a
 human re-checks by playing the game.
