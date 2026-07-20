@@ -35,7 +35,7 @@ build, and vitest on every push and PR — on ubuntu, with no Dota installed.
 | `game/`, `content/` | Dota addon dirs (KV data, layouts, maps). Compiled output here is **gitignored** |
 | `scripts/` | install / launch helpers |
 | `docs/specs/` | One directory per feature: spec + plan + marker contract (templates provided) |
-| `.claude/skills/` | `/sdd-feature` (the feature loop) and `/landmine-check` (pre-commit sweep) |
+| `.claude/skills/` | Process: `/sdd-feature`, `/landmine-check`. Craft: `/tstl-lua-gotchas`, `/ability-modifier-patterns`, `/kv-authoring`, `/panorama-ui` |
 
 ## Workflow
 
@@ -43,6 +43,12 @@ New features follow the SDD loop — invoke the `/sdd-feature` skill when
 starting one: spec → plan → **marker contract** → implement → **evidence** →
 **landmine**. Before committing anything that touches heroes, abilities,
 particles, bots, KV, panorama, or spawns, run `/landmine-check`.
+
+Craft skills — invoke by area before writing code there:
+`/tstl-lua-gotchas` for any vscripts work (truthiness, GC, handle hygiene),
+`/ability-modifier-patterns` for abilities/items/modifiers,
+`/kv-authoring` for anything under `game/scripts/npc/` or `game/resource/`,
+`/panorama-ui` for anything under `src/panorama/` or `content/panorama/`.
 
 ## Architecture invariants
 
