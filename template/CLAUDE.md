@@ -34,6 +34,15 @@ build, and vitest on every push and PR — on ubuntu, with no Dota installed.
 | `src/panorama/` | UI TS -> `content/panorama/scripts/custom_game/` |
 | `game/`, `content/` | Dota addon dirs (KV data, layouts, maps). Compiled output here is **gitignored** |
 | `scripts/` | install / launch helpers |
+| `docs/specs/` | One directory per feature: spec + plan + marker contract (templates provided) |
+| `.claude/skills/` | `/sdd-feature` (the feature loop) and `/landmine-check` (pre-commit sweep) |
+
+## Workflow
+
+New features follow the SDD loop — invoke the `/sdd-feature` skill when
+starting one: spec → plan → **marker contract** → implement → **evidence** →
+**landmine**. Before committing anything that touches heroes, abilities,
+particles, bots, KV, panorama, or spawns, run `/landmine-check`.
 
 ## Architecture invariants
 

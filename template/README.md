@@ -30,6 +30,8 @@ linking step. That is what makes CI on a Valve game mod possible.
 | `game/`, `content/` | The KV files and layouts the engine insists on, each with a comment saying why |
 | `.github/workflows/ci.yml` | Typecheck + build + tests on every push |
 | `CLAUDE.md` | Pre-filled architecture invariants, so an agent starts the project already knowing what will silently break |
+| `.claude/skills/` | Two Claude Code skills: `/sdd-feature` walks the spec → contract → implement → evidence loop; `/landmine-check` sweeps a change against the silent-failure catalog before commit |
+| `docs/specs/` | Spec and plan templates the `/sdd-feature` skill instantiates per feature |
 
 ## The one step you cannot script
 
