@@ -83,7 +83,8 @@ compile into the addon and your addon load breaks. See
 [chapter 5](05-testing-without-engine.md) for the full setup.
 
 The payoff, measured: the project's unit suite went 30 → 141 → 192 → 314 → **375 tests across
-47 files**, running on a Mac with Dota not installed. The bot engine alone landed with 92
+47 files** by the end of the build, and → **653 across 59** after the adversarial review pass,
+running on a Mac with Dota not installed. The bot engine alone landed with 92
 tests green, then 109, then 117 after integration. Every one of those runs in seconds, in CI,
 on every push.
 

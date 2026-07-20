@@ -18,8 +18,11 @@ Four tiers, each answering a question the one below it cannot.
 | 3. Manual playtest | your machine + Dota | Is it any good? | your evening |
 | 4. Evidence review | frames from tier 2 | Can the player *see* it? | minutes, after tier 2 |
 
-Archer Wars finished at 375 unit tests across 47 files at tier 1. That number is
-not an accident of diligence; it is the direct result of one architectural rule.
+Archer Wars finished its build at 375 unit tests across 47 files at tier 1, and
+the adversarial review described in chapter 11 took it to 653 across 59 — the
+review's fixes were mostly *new pure functions with tests*, which is what tier 1
+does to a codebase once the boundary exists. That number is not an accident of
+diligence; it is the direct result of one architectural rule.
 
 ## The purity rule
 
