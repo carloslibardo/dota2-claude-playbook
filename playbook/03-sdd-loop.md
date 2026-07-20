@@ -276,7 +276,7 @@ protects code that has not been written yet.
 
 The rule of thumb: **if it cost you more than an hour and the cause was not
 visible from the symptom, it is a landmine.** Write it down in both places
-before you move on. [Chapter 4](04-landmines.md) is seventeen of them.
+before you move on. [Chapter 4](04-landmines.md) is twenty-five of them.
 
 ## When the invariant is wrong
 

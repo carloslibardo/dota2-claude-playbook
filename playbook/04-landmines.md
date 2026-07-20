@@ -1,6 +1,6 @@
 # 4. Landmines
 
-Seventeen things that cost real days, with the symptom you will actually see,
+Twenty-five things that cost real days, with the symptom you will actually see,
 the cause, and the fix.
 
 They share a shape. Almost none of them produce an error at the place where the
@@ -467,9 +467,409 @@ checksums over serialized floats, and the same fix.
 
 ---
 
+## Interlude — where L18 through L25 came from
+
+L1–L17 were bought with playtests, crashes and rejected deliverables: a human
+saw something wrong and we dug until we found why.
+
+L18–L25 came from somewhere else. On 2026-07-20, three agents read the whole
+Archer Wars repository adversarially — one on core systems and `lib/`, one on
+the bot engine, one on content, KV, Panorama and tooling — with no brief other
+than "find what is wrong". They returned 71 ranked findings; the fixes landed as
+archer-wars PR #24.
+
+That provenance matters when you read the symptoms below. Where the record shows
+a human reported the behaviour, it says so. Everywhere else the symptom is
+**traced from the code, not observed** — this is what the branch does, read by
+hand, and in several cases nobody had played the affected class since the code
+was written. That is itself the finding: eight defects of this severity survived
+in a codebase with 600+ passing unit tests, a headless e2e rig and a frame-review
+gate, because none of them produce an error and most require playing one specific
+class or standing in one specific place to see.
+
+---
+
+## L18 — a wire value of `0` is `true` in Lua
+
+**Symptom.** A player opens the bot panel, sets **Fill bots: Off**, starts the
+match, and gets a full lobby of bots. The "on" path and the "off" path both turn
+bots on. Nothing is logged, because from the server's point of view nothing
+unusual happened.
+
+**Cause.** The classic Lua truthiness trap, in the one place it is hardest to
+see. Panorama's `CustomGameEvent` payloads type a flag as `boolean | 0 | 1`, and
+the engine's networking turns a wire `false` into `0` server-side. The handler
+did what looks like the careful thing:
+
+```ts
+Convars.SetInt("archer_wars_fill_bots", enabled ? 1 : 0);
+```
+
+That is correct TypeScript and broken Lua. `enabled` arrives as `0`, `0` is
+truthy in Lua, so the ternary takes the `1` branch and writes `1` for an explicit
+off. Note what makes this the most instructive member of the truthiness family:
+the code is not sloppy, it is *defensive* — it explicitly normalizes to 1/0 —
+and the comment above it correctly described the wire protocol. Both the author
+and every reviewer read the ternary as the fix rather than as the bug. Whatever
+tstl printed for this line, nobody connected it to a toggle that appeared to be
+handling its two states explicitly.
+
+**Fix.** Never let a wire value reach a conditional. One pure normalizer,
+`src/vscripts/lib/wireFlags.ts`, applied at every boundary:
+
+```ts
+export function normalizeFlag(value: boolean | 0 | 1 | undefined): 0 | 1 {
+    if (value === undefined) return 0;
+    if (value === false) return 0;
+    if (value === 0) return 0;
+    return 1;
+}
+```
+
+Three explicit comparisons, no truthiness anywhere, and — because it is pure —
+a unit test can assert the exact failing input (`0`) on a laptop. `botSelect.ts`
+now calls it; the raw ternary is banned.
+
+**The general rule.** Anywhere a value crosses a boundary you did not write —
+client to server, KV to TypeScript, convar to code — it can arrive in a
+representation your conditional was not written for. Convert it explicitly, in a
+named function, at the boundary. This is the same shape as L1 and L17: a
+translation layer you did not know was translating.
+
+*archer-wars PR #24 (2026-07-20); `systems/botSelect.ts`, `lib/wireFlags.ts`.*
+
+---
+
+## L19 — modifier parameters are server-only, and the client predicts zero
+
+**Symptom.** A slow debuff rubber-bands. The victim keeps running at full speed
+for a fraction of a second, then snaps backwards. An armor debuff never moves the
+number in the victim's HUD. No error, and — this is the part that costs the day —
+**nothing in any log is wrong**, because on the server every value is correct.
+
+**Cause.** `OnCreated(params)` runs on both realms, but the `params` table is
+populated server-side only. Dota's client runs the same modifier code to
+*predict* movement, and it evaluates the functions declared in
+`DeclareFunctions()` locally. So a magnitude captured into a field in
+`OnCreated`:
+
+```ts
+OnCreated(params: { slowPct: number }): void {
+    this.slowPct = params.slowPct;   // server: 50. client: 0.
+}
+GetModifierMoveSpeedBonus_Percentage(): number {
+    return -this.slowPct;            // server applies -50%. client predicts 0%.
+}
+```
+
+...produces a client that believes the hero is at full speed and a server that
+disagrees. What the player sees is the correction, which reads as lag.
+
+**Fix, when the modifier's own ability owns the value.** Read it off
+`this.GetAbility().GetSpecialValueFor(...)` — ability KV is replicated, so both
+realms get the same number.
+
+**Fix, when it does not.** In Archer Wars these debuffs are applied by
+`lib/arrowHitPipeline.ts` with the *arrow* ability as the source; the *bow item*
+is only the value donor. `GetAbility()` therefore returns `archer_arrow`, which
+has no `slow_pct` value to read. The channel that does work is the **stack
+count**, which is networked:
+
+```ts
+OnCreated(params: { slowPct: number }): void {
+    if (!IsServer()) return;
+    this.SetStackCount(Math.floor(params.slowPct ?? 0));
+}
+GetModifierMoveSpeedBonus_Percentage(): number {
+    return -this.GetStackCount();    // both realms read the same number
+}
+```
+
+It costs you fractional magnitudes (stack counts are integers) and it consumes
+the stack display, which is a real trade. Take it anyway: a magnitude the client
+cannot see is a magnitude the player experiences as netcode failure.
+
+*archer-wars PR #24; `modifiers/modifier_frost_arrow.ts`,
+`modifiers/modifier_lightning_arrow.ts`.*
+
+---
+
+## L20 — a recipe has already combined by the time you hear about the purchase
+
+**Symptom.** A shop rule that refunds and removes out-of-zone purchases works
+perfectly for plain items, and hands out free upgrades for recipe items. Buy the
+recipe from anywhere on the map: you get the gold back **and** you keep the
+built item. Repeatable: the 600-gold recipe cost comes back and the 1200- or
+1800-gold weapon it just built stays in the inventory.
+
+**Cause.** The guard did the obvious thing — take the item name from
+`dota_item_purchased`, find it in the buyer's inventory, remove it, refund the
+cost:
+
+```ts
+const item = findInInventory(hero, event.itemname);   // undefined for a recipe
+if (item) hero.RemoveItem(item);
+PlayerResource.ModifyGold(playerId, cost, true, ...);  // runs regardless
+```
+
+For `item_recipe_marksmans_luck_2`, `findInInventory` returns nothing. The engine
+combined the recipe with its components and placed the *built* item in the
+inventory **before** the event fired. So the removal is a no-op, the refund is
+not, and the player is up one item.
+
+Two smaller traps inside the same event: the name you receive is the recipe's,
+not the product's, and the recipe cost is not the item cost — components were
+purchased separately, and (in this design) refunded separately by the same guard.
+
+**Fix.** Decide what to remove from the purchased name, in a pure function that
+can be unit-tested at both branches:
+
+```ts
+const removeItemName = purchasedName.startsWith("item_recipe_")
+    ? resolved.item.internalName   // the BUILT item
+    : purchasedName;
+```
+
+And structurally: a compensating action must not run when its paired action
+failed. `refundGold` and `removeItemName` are returned together by one decision
+function, so a future edit cannot separate them.
+
+**The general rule.** When you react to an engine event, ask what the engine
+already did before it told you. Purchase, combine, level-up, death — these are
+notifications of a completed transaction, not requests for permission. Anything
+you "undo" in the handler must be undone against the state as it is *now*.
+
+*archer-wars PR #24; `systems/shopPurchaseGuard.ts`, `lib/shopRefund.ts`.*
+
+---
+
+## L21 — hand-maintained registries drift from the KV, silently
+
+**Symptom.** Three, in one codebase, none of them producing so much as a warning:
+
+- Bots piloting three of the seven classes never cast a single ability. They
+  moved, aimed and right-clicked for a full match. The bot kit table
+  (`bots/kits/kitAdvisor.ts`) keyed four hero names; the game shipped seven.
+- Three ultimates were never castable by any bot. The bot's ability-probe list
+  was a hand-written array of ability names, and
+  `archer_grapple_volley`, `archer_spread_shot_volley` and
+  `archer_sniper_shot_deadeye` were not in it, so nothing ever asked the engine
+  whether they were ready.
+- The two most expensive items in the game were buyable from anywhere on the
+  map, bypassing the shop-zone restriction entirely.
+  `item_marksmans_luck_2`/`_3` existed in `game/scripts/shops.txt` at 1200 and
+  1800 gold with no matching entry in `lib/itemCatalog.ts`, so the zone guard's
+  `resolvePurchasedShopItem` returned `undefined` and the guard declined to act.
+
+**Cause.** The same shape every time. The engine reads one file (KV, `shops.txt`,
+`npc_heroes_custom.txt`); the TypeScript keeps its own table of what it believes
+is in there. Both are correct when written. Then one side gains an entry.
+
+There is no mechanism in this stack that notices. KV is stringly-typed and
+unvalidated, TypeScript cannot see into it, and every one of these failures
+manifests as *nothing happening* for one class, one item, or one bot — which
+requires playing that exact class or buying that exact item to observe. The bot
+kit gap survived the headless e2e rig for the simple reason that the rig's bots
+were spawning the four classes that had kits.
+
+**Fix. Drift tests.** A pure Node test that reads the KV file with
+`readFileSync`, scans it with a small hand-rolled parser, and diffs it against
+the TypeScript table. No engine, no mocks, milliseconds. Archer Wars now carries
+three:
+
+| Test | Asserts |
+|---|---|
+| `lib/__tests__/itemCatalogKvDrift.test.ts` | every `"item" "item_x"` in `shops.txt` has a `SHOP_ITEMS` entry, and its cost matches `npc_items_custom.txt` |
+| `lib/__tests__/locFiles.test.ts` | every ability/item block in the KV has its localization tokens in `addon_english.txt` and `addon_brazilian.txt` |
+| `bots/__tests__/kits.test.ts` | every `"archer_*"` string appearing in any `bots/kits/*.ts` source file is present in `ALL_KIT_ABILITY_NAMES` |
+
+The third is worth a second look: it does not parse KV at all, it **scans its own
+sibling source files** for ability-name literals and asserts the registry
+contains them. Any hand-maintained list can be checked against whatever the
+authoritative source happens to be, including source code.
+
+The better structural fix, where it is available, is to not have the second copy:
+`ALL_KIT_ABILITY_NAMES` is now *derived* from the kit table rather than written
+beside it. Derive first; drift-test what you cannot derive.
+
+[Chapter 5](05-testing-without-engine.md#drift-tests) has the technique in full,
+with the parser.
+
+*archer-wars PR #24; the three tests above.*
+
+---
+
+## L22 — `DestroyParticle` without `ReleaseParticleIndex` leaks
+
+**Symptom.** None, for a while. Then a long match gets choppy on the server.
+There is no error at any point and no single call site looks wrong.
+
+**Cause.** Particle indices are a pooled resource with a two-call teardown.
+`DestroyParticle` stops the effect; `ReleaseParticleIndex` returns the handle.
+Skip the second and the index is held for the life of the match.
+
+Two flavours found in one review pass:
+
+- **Per-cast accumulation.** `abilities/archer_detonate.ts` created one
+  explosion particle per planted charge and released none. Every Detonate cast
+  leaked one index per charge, for every Demolitionist, all match.
+- **Never torn down at all.** `systems/shopZone.ts` created ground-ring marker
+  particles with `CUSTOMORIGIN` — no parent entity, so nothing destroys them when
+  the system stops. `stop()` freed the shop structures and left the rings.
+
+The second one is the general hazard: a particle attached to a unit is cleaned up
+when the unit dies, so most of your particles appear to manage themselves and you
+form the belief that they do. The ones with no parent do not.
+
+**Fix.** Both calls, always, paired at the same site:
+
+```ts
+ParticleManager.DestroyParticle(pfx, false);
+ParticleManager.ReleaseParticleIndex(pfx);
+```
+
+For a fire-and-forget effect whose control points are all set at creation, you
+can release immediately — the effect still plays. That is what `archer_detonate`
+does now, and it is the pattern to prefer, because it removes the possibility of
+a teardown path that never runs.
+
+*archer-wars PR #24; `abilities/archer_detonate.ts`, `systems/shopZone.ts`,
+matching the correct pattern already in `abilities/archer_holy_arrow.ts`.*
+
+---
+
+## L23 — a written rule with no automated check decays
+
+**Symptom.** The Shadow class's signature ability — a hook, the thing the class
+is built around — renders nothing at all. The projectile flies, the target is
+pulled, the damage lands. There is no rope, no chain, no visual. No error.
+
+**Cause.** `abilities/archer_hook.ts` fires its projectile with
+`EffectName: "particles/units/heroes/hero_pudge/pudge_meathook.vpcf"`. Pudge is
+not in this game's hero roster, so the engine never precaches his particles, so
+the path resolves to nothing and renders nothing. That is L3 and L12, exactly,
+with no new mechanism.
+
+**The actual finding is not the mechanism.** This repository already knew this
+rule. It is written in `CLAUDE.md`. It is L3 in this chapter. The `Precache()`
+function in `GameMode.ts` is a long, careful, commented list of particle paths
+demonstrating that whoever wrote it understood the rule completely. And the
+game's signature ability shipped invisible anyway, because between "the rule is
+written down" and "this specific path is in the list" there was nothing but human
+attention.
+
+**Fix.** The precache line, and then the check that makes the line unnecessary to
+remember: a drift test (L21) that greps every `particles/*.vpcf` string literal
+in `src/vscripts/**` and asserts each one appears in the `Precache()` body.
+
+That test does not exist in Archer Wars yet — the fix that landed was the missing
+precache lines (meathook, the grapple stun overhead effect, the frost nova
+explosion, and two runtime-spawned units). We are noting the check as the
+inference it is: the same source-scan pattern as `kits.test.ts` applies directly.
+
+**The general rule.** A rule in `CLAUDE.md` reduces the rate of a mistake; it
+does not take the rate to zero, and it decays as the file grows and the codebase
+grows past what anyone re-reads. For any invariant you have written down twice,
+ask what would fail if it were violated. If the honest answer is "someone would
+have to notice", you have a convention, not an invariant.
+
+*archer-wars PR #24; `GameMode.ts` `Precache()` versus
+`abilities/archer_hook.ts`.*
+
+---
+
+## L24 — entity-index keys do not survive hero replacement
+
+**Symptom.** An "every 3rd arrow hits harder" item resets its progress when the
+player switches class, and — occasionally, later in the match — fires early,
+having inherited a stranger's count.
+
+**Cause.** The counters were keyed on `caster.entindex()`. A class swap calls
+`ReplaceHeroWith`, which destroys the old hero entity and creates a new one: the
+same player is now a different entity index. The old key is orphaned in the map
+for the rest of the match, and because Source 2 **recycles entity indices**, a
+later entity can be handed that exact index and inherit the stale count.
+
+This generalizes past class swaps. Any per-player state keyed on an entity
+handle or index — cooldown bookkeeping, aggro tables, progress toward a threshold,
+per-hero UI state — breaks on every path that recreates a hero: class change,
+`ReplaceHeroWith`, a respawn implemented as recreation, an illusion mistaken for
+its owner.
+
+**Fix.** Key on `GetPlayerOwnerID()`. It is stable for the whole match across
+every path that can hand a player a new body:
+
+```ts
+// Every-Nth counters are keyed by the caster's PLAYER id, not its entity index:
+// a class swap (ClassSelect's ReplaceHeroWith) gives the same player a brand-new
+// hero entity, which reset the progress and leaked/recycled the old entindex key.
+const counterKey = caster.GetPlayerOwnerID();
+```
+
+Guard the negative case while you are there: `GetPlayerOwnerID()` returns `-1`
+for owner-less units (illusions, spawned wards, summons). The same review found
+a shop-zone occupancy set writing player `-1` into a net table and granting shop
+access to a non-player.
+
+*archer-wars PR #24; `lib/arrowHitPipeline.ts`, `lib/arrowHitCounters.ts`.*
+
+---
+
+## L25 — velocity estimated from position deltas explodes on teleports
+
+**Symptom.** For one tick after any blink, hook or position swap, every bot in
+the game aims at a point far outside the arena. In a mode where the burst window
+*is* the blink, that is precisely the tick you needed them to hit.
+
+**Cause.** The bot perception layer estimated each tracked hero's velocity the
+obvious way:
+
+```ts
+const vel = scale(sub(pos, prev.pos), 1 / (now - prev.time));
+```
+
+Sound for running. But a hook, blink or swap relocates a hero several hundred
+units between two consecutive samples, and dividing that by one tick's worth of
+time yields thousands of units per second — an order of magnitude above the
+fastest achievable move speed in Dota, which is 550. That number goes straight
+into the lead-aim solver, which faithfully aims where a hero travelling that fast
+would be.
+
+Nothing here is an error. The estimator is correct, the aim solver is correct,
+its unit tests pass, and the composition is nonsense for exactly one tick per
+teleport.
+
+**Fix.** Reject the physically impossible sample rather than smoothing it:
+
+```ts
+/**
+ * Per-tick displacement above this implies a teleport/hook/swap, not running:
+ * the fastest achievable hero move speed in Dota is 550 u/s, so 700 leaves
+ * headroom for a haste burst while still rejecting a blink-sized jump.
+ */
+const MAX_TRACK_SPEED = 700;
+
+if (dist(pos, prev.pos) <= MAX_TRACK_SPEED * dt) vel = scale(delta, 1 / dt);
+// else: leave velocity at zero for this tick — aim at where they are.
+```
+
+Dropping the sample beats clamping it, because a clamped velocity is a
+confident wrong direction and zero is an honest "aim at the current position".
+
+**The general rule.** Any quantity you derive from a difference between samples
+assumes the underlying value is continuous. Game worlds are not continuous —
+teleports, respawns and camera cuts are discontinuities by design. Bound the
+derived value by what is physically possible in your world, and pick the bound
+from a real engine limit (550 u/s here) rather than from a number that looked
+large.
+
+*archer-wars PR #24; `bots/perception.ts`.*
+
+---
+
 ## The pattern
 
-Fourteen of these seventeen fail silently or report the wrong thing. That is the
+Twenty-two of these twenty-five fail silently or report the wrong thing. That is the
 single most important fact about this engine, and it has a direct consequence
 for how you work:
 

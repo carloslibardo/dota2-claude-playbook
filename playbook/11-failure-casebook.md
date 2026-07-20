@@ -1,6 +1,6 @@
 # 11. The Failure Casebook
 
-Fourteen failures, told properly.
+Seventeen failures, told properly.
 
 [Chapter 4](04-landmines.md) is the terse version — the landmine list, each entry a symptom, a
 cause and a mechanical fix, written to be scanned in five minutes when something is broken.
@@ -529,9 +529,157 @@ worth a sentence.
 
 ---
 
+<a id="f15"></a>
+## F15 — The toggle that did the opposite
+
+**Story.** F1 through F14 were all bought the same way: a human played the game, or watched
+the frames, and something was wrong. F15, F16 and F17 come from a different source, and that
+is most of their point.
+
+On July 20, after the game was published and playable, three agents were pointed at the
+repository with no brief beyond "find what is wrong" — one on core systems, one on the bot
+engine, one on content and tooling. They returned 71 ranked findings. Several were defects a
+player would hit in their first match.
+
+The most instructive is four characters long. The bot panel's fill toggle wrote its state to a
+convar:
+
+```ts
+Convars.SetInt("archer_wars_fill_bots", enabled ? 1 : 0);
+```
+
+Panorama sends that flag as `boolean | 0 | 1`, and the engine hands the server a `0` for a
+wire `false`. In Lua, `0` is truthy. The ternary took the `1` branch. Setting **Fill bots:
+Off** filled the lobby with bots.
+
+Read the line again, because the reason this survived is that it looks like the *fix*. It is
+not a lazy `if (enabled)` — it is a defensive normalization to 1/0, written by someone who was
+thinking about the wire format, under a comment that correctly described the wire format. Both
+the author and every subsequent reader parsed it as the careful version. tstl's truthiness
+warning — the one thing in this toolchain that catches the whole family — does not fire, because
+a ternary on a `boolean | 0 | 1` is a legal boolean test to the compiler.
+
+The fix is `lib/wireFlags.ts::normalizeFlag`: three explicit comparisons, no truthiness, pure,
+with a unit test that passes the exact failing value.
+
+**Rule.** **A value that crosses a boundary you did not write can arrive in a representation
+your conditional was never written for.** Convert it in one named function, at the boundary,
+and unit-test that function at the value that breaks it. And the sharper lesson: **the code
+most likely to hide this bug is the code that looks like it already handled it.** When you
+audit a translation layer, do not skip the lines that appear to be doing the conversion — those
+are where the wrong conversion lives.
+
+> Mechanical fix: [chapter 4, L18](04-landmines.md).
+
+---
+
+<a id="f16"></a>
+## F16 — The refund that paid for the item
+
+**Story.** Archer Wars sells items from a marked shop zone. Because the engine cannot restrict
+delivery by location in a fountain-less arena (L13), the restriction is enforced after the
+fact: a guard listens for `dota_item_purchased`, and if the buyer was outside the zone it takes
+the item back and returns the gold.
+
+That worked for every plain item in the nineteen-item catalog. For the recipe-built ones, it
+paid players to break the rule.
+
+The guard looked up `event.itemname` in the buyer's inventory and removed it. For
+`item_recipe_marksmans_luck_2`, the lookup found nothing — the engine had already combined the
+recipe with its components and placed the *built* item in the inventory before the event fired.
+So the removal was a no-op. The refund was not. Buy the most expensive weapon in the game from
+anywhere on the map, keep the weapon, take the recipe gold back, repeat.
+
+Two things are worth extracting. First, the mistaken model: the handler was written as if the
+event were a *request* it could veto, when it is a *notification of a completed transaction*.
+The engine had already done three things — charged the gold, consumed the components, built the
+product — before the code got a say.
+
+Second, the structure that let a half-executed compensation ship. The removal and the refund
+were two independent statements, and only one of them could fail. The fix makes them a single
+returned decision:
+
+```ts
+const removeItemName = purchasedName.startsWith("item_recipe_")
+    ? resolved.item.internalName   // the BUILT item
+    : purchasedName;
+return { removeItemName, refundGold: resolved.cost };
+```
+
+One pure function, both branches unit-tested, and no way for a later edit to keep one half.
+
+**Rule.** **When you react to an engine event, ask what the engine already did before it told
+you.** Anything you intend to undo must be undone against the state as it is now, not the state
+implied by the event's name.
+
+And the general form, which is not about Dota: **a compensating action must not be able to run
+when its paired action failed.** If your rollback is two statements, it is one bug away from
+being a giveaway. Return them together, or perform them in one function that cannot succeed
+partially.
+
+> Mechanical fix: [chapter 4, L20](04-landmines.md).
+
+---
+
+<a id="f17"></a>
+## F17 — Three registries, three silences, one test shape
+
+**Story.** The same review turned up three defects with different symptoms and one cause.
+
+Bots piloting three of the seven classes never cast a single ability for an entire match. They
+moved, they chased, they aimed, they right-clicked. The bot kit table in
+`bots/kits/kitAdvisor.ts` was keyed by hero name and had four entries; the game had shipped
+seven classes.
+
+Separately, three ultimates were never castable by any bot at all. The bot's ability probe
+walked a hand-written array of ability names, and `archer_grapple_volley`,
+`archer_spread_shot_volley` and `archer_sniper_shot_deadeye` were not in it, so nothing ever
+asked the engine whether they were ready.
+
+Separately again, the two most expensive items in the game could be bought from anywhere on the
+map. `item_marksmans_luck_2` and `_3` were in `game/scripts/shops.txt` at 1200 and 1800 gold
+with no entry in `lib/itemCatalog.ts`, so the shop-zone guard could not resolve them and
+declined to act on the purchase — the same guard as F16, failing open instead of paying out.
+
+None of the three produced an error, a warning, or a log line. All three require playing one
+specific class, or buying one specific item, to notice. And the headless rig did not catch the
+kit gap for a reason that is almost funny: the bots it spawned were the four classes that had
+kits.
+
+What connects them is a shape, not a subsystem. In every case the engine reads one file and the
+TypeScript keeps a second copy of what it believes is in that file. Both were correct when
+written. Then one side gained an entry, and nothing in this stack — not the type checker, not
+the tests, not the compiler — can see across that gap.
+
+The fix is the most portable idea to come out of the whole review: **drift tests**. A pure Node
+test reads the authoritative file with `readFileSync`, scans it with a twenty-line parser, and
+diffs it against the TypeScript table. It runs in milliseconds with no engine. Archer Wars now
+has three — KV against the shop catalog, KV against the localization files, and a source scan
+that asserts every `archer_*` ability literal appearing anywhere in `bots/kits/*.ts` is present
+in the exported registry.
+
+Where the second copy can be deleted instead, it was: the ability list is now *derived* from
+the kit table rather than maintained beside it.
+
+**Rule.** **Every hand-maintained table that mirrors data the engine owns will drift, and the
+drift is silent.** Derive it if you can. If you cannot, write a test that parses the engine's
+copy and diffs it — the parser only has to be good enough for one file format you control, and
+that test is the cheapest coverage in the entire project.
+
+The generalization worth carrying out of Dota: this is what to write whenever a fact lives in
+two places and only one of them is compiled. Route tables versus handlers, migrations versus
+models, feature flags versus their defaults, `package.json` versus the lockfile. The failure
+mode is always the same — the newer entry is invisible to the older copy, and the symptom is
+that one specific thing quietly does nothing.
+
+> Mechanical fix: [chapter 4, L21](04-landmines.md). Technique in full:
+> [chapter 5, drift tests](05-testing-without-engine.md#drift-tests).
+
+---
+
 ## Reading the casebook as a whole
 
-Sorted by underlying cause rather than by symptom, the fourteen collapse into five families:
+Sorted by underlying cause rather than by symptom, the seventeen collapse into six families:
 
 **Silent no-ops (F1, F6, F10, F11, and half of F14).** The engine accepted the call and did
 nothing. This is the dominant hazard class in game work and the reason
@@ -548,10 +696,22 @@ symptoms, one fix shape.
 **Evidence pipeline (F11, F12, F13).** The proof machinery was aimed at the wrong thing, and no
 amount of re-running it would have said so.
 
-If you are starting a project of this kind, the honest prediction is that you will meet all five
+**Two copies that must agree (F15, F16, F17).** A wire value and the Lua that reads it; the
+engine's model of a purchase and the handler's model of it; a KV file and the TypeScript table
+that mirrors it. Nothing errors, because each copy is internally consistent.
+
+If you are starting a project of this kind, the honest prediction is that you will meet all six
 families in your first two weeks. The point of writing them down is not that you will avoid
 them — it is that you will recognize them on day two instead of day eight, and that when the
 third rejected deliverable arrives you will know to stop and go build the pipeline.
+
+One last thing about the sixth family, since it arrived last and by a different route. F1
+through F14 were found by playing the game. F15 through F17 were found by three agents reading
+the repository adversarially, after the game was built, tested, gated and published, in a
+codebase that had 600+ passing unit tests, a headless rig and a frame-review gate. They found 71 findings, several of which a
+player meets in their first match. Playtests and evidence pipelines catch what a human can
+perceive; a directed adversarial read catches the defects whose entire symptom is that one
+specific thing quietly does nothing. Budget for both.
 
 **Next:** [chapter 12, mine your own story](12-mine-your-own-story.md) — how to dig this
 material out of your own transcripts, with the true numbers.

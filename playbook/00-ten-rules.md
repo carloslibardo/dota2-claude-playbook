@@ -72,7 +72,17 @@ across 47 files running on a Mac with Dota not even installed, covering bot deci
 geometry, shop eligibility and hysteresis bands. A recorded VM run took thirteen minutes.
 Everything you can move from the second lane to the first lane you should.
 
-> Expanded in: [chapter 5](05-testing-without-engine.md) and [chapter 7 (testable bots)](07-testable-bots.md).
+That includes your **data**, not just your logic. Every hand-maintained table
+that mirrors something the engine owns — a shop catalog beside `shops.txt`, a bot
+kit map beside the hero KV, an ability-name list beside the ability files — will
+drift, and the drift is silent: the item is simply unbuyable, the class simply
+never casts. Three of those shipped in Archer Wars at once. A *drift test* — pure
+Node, `readFileSync` the authoritative file, twenty lines of parser, diff it
+against the TypeScript — costs an hour and closes the class permanently. Derive
+the second copy if you can; diff it if you cannot.
+
+> Expanded in: [chapter 5](05-testing-without-engine.md) and [chapter 7 (testable bots)](07-testable-bots.md);
+> the failure is [chapter 11, F17](11-failure-casebook.md#f17).
 
 ### 7. Encode every root cause as a dated comment next to the constant it produced
 

@@ -128,7 +128,7 @@ the wrong place. The agent is not being careless. It is being fed a truthful-loo
 The countermeasure, developed over the project and now rule 9, is to never call these APIs
 bare. Wrap each one in a predicate you can test on your laptop, and log the resolved value at
 boot so "it silently did nothing" becomes "it printed `pathable=false`". The full catalog of
-seventeen such landmines is [chapter 4](04-landmines.md).
+twenty-five such landmines is [chapter 4](04-landmines.md).
 
 ## 1.3 The model will write plausible Dota that does not exist
 

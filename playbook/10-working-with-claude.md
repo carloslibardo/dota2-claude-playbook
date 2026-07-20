@@ -407,5 +407,5 @@ often, because you can build a process on the first one.
 - **Review the verification code hardest.**
 - **Coordinate concurrent sessions** with disjoint file ownership and a rule for the shared rig.
 
-**Next:** [chapter 11, the failure casebook](11-failure-casebook.md) — all fourteen failures as
+**Next:** [chapter 11, the failure casebook](11-failure-casebook.md) — all seventeen failures as
 story-and-rule pairs.

@@ -181,6 +181,112 @@ Now a balance change that narrows the ring fails a test instead of producing a
 map where two spawns clip a wall. Comments rot; a test that recomputes the claim
 does not.
 
+<a id="drift-tests"></a>
+## Drift tests
+
+The purity rule gets your *logic* into tier 1. Drift tests get your *data* in,
+and they cover a failure class nothing else in this stack can see.
+
+The setup is unavoidable in a Dota addon. The engine reads KV files —
+`npc_items_custom.txt`, `shops.txt`, `npc_heroes_custom.txt`,
+`addon_english.txt`. Your TypeScript keeps its own tables describing what is in
+them: a shop catalog, a bot kit map, an ability-name list. Both are correct the
+day they are written. Then somebody adds an item to `shops.txt` and does not add
+it to the catalog.
+
+Nothing notices. KV is stringly-typed and unvalidated, so the engine does not
+care; TypeScript cannot read the KV file, so the compiler does not care; and the
+symptom is that one item, or one class, quietly does nothing — invisible unless
+you play that exact class or buy that exact item. Three separate instances of
+this shipped in Archer Wars simultaneously, including bots for three of seven
+classes that never cast an ability, and a shop restriction that failed open on
+the two most expensive items in the game ([chapter 4, L21](04-landmines.md), and
+[chapter 11, F17](11-failure-casebook.md#f17)).
+
+**A drift test is a pure Node test that reads the authoritative file and diffs it
+against the TypeScript copy.** No engine, no mocks, no fixtures — `readFileSync`,
+a small parser, and an assertion.
+
+The parser is the part people flinch at, and it should not be. You do not need a
+KV library. You need "quoted key at brace depth 1" and one or two field regexes,
+for a file format you control:
+
+```ts
+// lib/__tests__/itemCatalogKvDrift.test.ts (abridged)
+const SCRIPTS_DIR = join(__dirname, "..", "..", "..", "..", "game", "scripts");
+
+/** Every `"item" "item_x"` line of shops.txt = what a player can actually buy. */
+function parseShopItems(): string[] {
+    const text = readFileSync(join(SCRIPTS_DIR, "shops.txt"), "utf-8");
+    const names: string[] = [];
+    for (const rawLine of text.split("\n")) {
+        const line = rawLine.trim();
+        if (line.startsWith("//")) continue;
+        const m = /^"item"\s+"(item_[a-z0-9_]+)"/.exec(line);
+        if (m) names.push(m[1]);
+    }
+    return names;
+}
+
+it("every shop item has a catalog entry", () => {
+    for (const name of parseShopItems()) {
+        expect(findShopItem(name), `${name} is in shops.txt but not SHOP_ITEMS`).toBeDefined();
+    }
+});
+
+it("catalog cost matches the KV ItemCost", () => {
+    for (const item of ALL_PURCHASABLE_ITEMS) {
+        expect(kvByName.get(item.internalName)?.cost).toBe(item.cost);
+    }
+});
+```
+
+Twenty lines of parser, and the class of bug is gone permanently.
+
+Three variants are worth knowing, because between them they cover most
+registries:
+
+**KV against a table.** The one above. Also: every ability block in
+`npc_abilities_custom.txt` has its tooltip tokens in `addon_english.txt` *and*
+every translated file, so a new ability cannot ship rendering
+`#DOTA_Tooltip_ability_x` in a playtest.
+
+**Source scan against a registry.** When there is no data file to parse, the
+source itself is authoritative. Archer Wars' `bots/__tests__/kits.test.ts` reads
+every `.ts` file in `bots/kits/`, extracts every `"archer_*"` string literal, and
+asserts each one appears in the exported ability list:
+
+```ts
+for (const file of readdirSync(kitsDir)) {
+    if (!file.endsWith(".ts")) continue;
+    const source = readFileSync(join(kitsDir, file), "utf8");
+    for (const m of source.matchAll(/"(archer_[a-z_]+)"/g)) referenced.add(m[1]);
+}
+expect(referenced.size).toBeGreaterThan(0);
+for (const name of referenced) expect(ALL_KIT_ABILITY_NAMES).toContain(name);
+```
+
+Crude, and it caught three ultimates that no bot could cast.
+
+**Guard the parser.** Every drift test needs one assertion that the parse itself
+produced something — `expect(items.length).toBeGreaterThan(10)`. A regex that
+silently matches nothing turns the whole test into a green no-op, which is worse
+than not having it, and it will happen the first time someone reformats the KV
+file.
+
+Two rules on top of the technique.
+
+**Derive before you diff.** A drift test is the fallback for a second copy you
+cannot eliminate. Where the copy can simply be computed from the first —
+`ALL_KIT_ABILITY_NAMES` from the kit table — do that instead and delete the
+question.
+
+**Assert the direction that fails silently.** Both directions are useful, but
+they are not equally urgent. An entry in the TypeScript with no KV backing
+usually fails loudly the first time you use it. An entry in the KV with no
+TypeScript backing is the silent one: a real, purchasable, castable thing your
+code does not know exists.
+
 ## What tier 1 cannot do
 
 Be honest about the boundary. Unit tests will not tell you:
@@ -191,8 +297,16 @@ Be honest about the boundary. Unit tests will not tell you:
 - whether the panel is covered by an invisible hittest surface
 - whether the game is fun
 
-Every single landmine in [chapter 4](04-landmines.md) is invisible to tier 1.
+Nearly every landmine in [chapter 4](04-landmines.md) is invisible to tier 1.
 That is not a failure of the tests; it is the reason tiers 2 through 4 exist.
+
+The exceptions are worth knowing precisely, because they mark where the boundary
+can be pushed. Drift tests reach L21 — a registry out of step with the KV — by
+reading the data file directly, and L17 (the cross-architecture float mismatch)
+is a tier-1 contract test on an exported artifact. Both are cases where the
+engine's *input* is a file on disk, so a Node process can check it even though a
+Node process can never run the engine. Whenever a landmine's cause is data rather
+than behaviour, ask whether tier 1 can be made to see it.
 
 The engine-facing files — `GameMode.ts`, the systems, the abilities, the
 perception layer — are deliberately left uncovered at tier 1. Testing them would

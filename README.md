@@ -48,14 +48,14 @@ Then read [chapter 4](playbook/04-landmines.md) before you write anything.
 | 1 | [Why this is hard](playbook/01-why-this-is-hard.md) | The engine fails silently, and an agent cannot notice that a game feels wrong. |
 | 2 | [The toolchain in ten minutes](playbook/02-toolchain-in-10-min.md) | TypeScript → Lua, the symlink installer, and how you get real CI on a Valve game mod. |
 | 3 | [The SDD loop](playbook/03-sdd-loop.md) | spec → plan → **contract** → implement → **evidence** → **landmine**. The last three arrows are the ones missing elsewhere. |
-| 4 | [Landmines](playbook/04-landmines.md) | Seventeen failures with symptom, cause, and fix. Fourteen of them are silent. |
+| 4 | [Landmines](playbook/04-landmines.md) | Twenty-five failures with symptom, cause, and fix. Twenty-two of them are silent. |
 | 5 | [Testing without the engine](playbook/05-testing-without-engine.md) | The purity rule, the two-config trick, and why reading pixels is a real tier of testing. |
 | 6 | [The autonomous VM rig](playbook/06-autonomous-vm-rig.md) | How "play the game" becomes one command, and what it costs. |
 | 7 | [Bots you can unit-test](playbook/07-testable-bots.md) | The bots were the test rig, so the bots had to be more trustworthy than the game. |
 | 8 | [Publishing and its ceiling](playbook/08-publishing-ceiling.md) | Where automation actually stops — which turned out not to be where the documentation says it does. |
 | 9 | [Research-first design](playbook/09-research-first-design.md) | Sourced-fact tagging and `DESIGN-FRESH`, so nobody has to guess which numbers were invented. |
 | 10 | [Working with Claude](playbook/10-working-with-claude.md) | What actually changed the output: the shape of the prompts. |
-| 11 | [The failure casebook](playbook/11-failure-casebook.md) | Fourteen failures as stories — symptom, quoted evidence, and the rule each one produced. |
+| 11 | [The failure casebook](playbook/11-failure-casebook.md) | Seventeen failures as stories — symptom, quoted evidence, and the rule each one produced. |
 | 12 | [Mine your own story](playbook/12-mine-your-own-story.md) | Your transcripts hold your true numbers and your best material. How to extract both. |
 
 There is also [`article/`](article/) — the long-form write-up of the Archer Wars
