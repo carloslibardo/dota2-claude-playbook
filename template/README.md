@@ -44,7 +44,9 @@ version.
 2. Rename the map in `game/addoninfo.txt` and create it in Hammer.
 3. Rename the `hello_arena_*` convars and net tables (`GameMode.ts`,
    `systems/e2eHarness.ts`, `src/common/netTables.d.ts`,
-   `game/scripts/custom_net_tables.txt`).
+   `game/scripts/custom_net_tables.txt`, and `src/panorama/hud.ts` — the HUD
+   hardcodes the net-table name and renders silently empty if it drifts; the
+   test rig's convar derives from the addon name, so it follows step 1 free).
 4. Rewrite `CLAUDE.md` for your game — but keep the **Architecture invariants**
    section, and add to it every time the engine surprises you.
 

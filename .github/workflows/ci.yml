@@ -1,0 +1,26 @@
+name: template CI
+# GitHub only discovers workflows in the REPO-ROOT .github/workflows — the
+# copy inside template/.github/ is for readers who copy template/ to a new
+# repo root, and never runs here. This one keeps the shipped boilerplate's
+# "builds, tests, and passes CI with no Dota installed" claim honest on every
+# push. Same five steps, run inside template/.
+on:
+  push:
+    branches: [main]
+  pull_request:
+defaults:
+  run:
+    working-directory: template
+jobs:
+  build:
+    # ubuntu, with no Dota 2 anywhere in sight. The postinstall
+    # (scripts/install.js) detects the missing Steam install and no-ops.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit -p src/vscripts/tsconfig.json
+      - run: bunx tsc --noEmit -p src/panorama/tsconfig.json
+      - run: bun run build
+      - run: bunx vitest run --passWithNoTests

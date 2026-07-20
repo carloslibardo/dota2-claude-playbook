@@ -78,6 +78,10 @@ place.
   repositions them onto a ring; do not remove it.
 - **`GameRules.SetUseUniversalShopMode(true)` is mandatory in a fountain-less
   arena**, or every native store purchase strands in the stash.
+- **Nothing pins time of day for you.** A custom arena with no day/night logic
+  goes pitch black at night. The e2e harness pins a repeating
+  `GameRules.SetTimeOfDay(0.5)` timer, but only when engaged — a human playtest
+  needs the same pin (or a real day/night design) or the map goes night-blind.
 - **Panorama panels default to `hittest="true"`.** A full-screen hittest panel
   silently swallows every mouseover in the game, killing native tooltips while
   leaving the game otherwise playable. Set `hittest="false"` all the way down

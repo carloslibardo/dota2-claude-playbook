@@ -106,6 +106,9 @@ export class GameMode {
         if (owner === undefined || owner === -1 || owner === killed.GetPlayerOwnerID()) return; // no self-kill credit
 
         const { total, hasWon } = this.score.recordKill(owner);
+        // Post-win kills return total=0 (the tracker freezes at the first
+        // winner); writing that to the net table would zero the killer's HUD.
+        if (total === 0) return;
         CustomNetTables.SetTableValue("hello_arena_score", tostring(owner), { kills: total });
         if (e2eEnabled()) print(`[E2E] kill credited: player ${owner} -> ${total} kill(s)`);
 

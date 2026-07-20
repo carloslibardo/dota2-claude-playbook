@@ -12,8 +12,13 @@
 #   REF       git ref to test                      (default: main)
 #   VM_KEY    ssh private key                      (default: ~/.ssh/dota_vm_key)
 #   RVM       checkout path on the VM              (default: C:\dota\repo)
-#   RUN_MODE  name of the run; picks the convar,   (default: smoke)
-#             the result file, and the artifact dir
+#   RUN_MODE  name of the run; names the result    (default: smoke)
+#             file, the MP4, and the artifact dir
+#
+# ADDON and RUN_MODE reach the VM as a staged run-config.ps1 that vm-run.ps1
+# dot-sources — `schtasks /run` executes the task with its REGISTERED
+# arguments, so there is no way to pass fresh ones per run. The e2e convar is
+# derived VM-side as "<addon>_e2e".
 #
 # Usage:
 #   PROJECT=my-project ./vm.sh create     # one-time: make the VM
@@ -100,24 +105,34 @@ case "${1:-}" in
     trap 'kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
 
     echo "waiting for ssh..."
+    SSH_OK=0
     for _ in $(seq 1 90); do
-      vm_ssh "echo ready" >/dev/null 2>&1 && break
+      if vm_ssh "echo ready" >/dev/null 2>&1; then SSH_OK=1; break; fi
       sleep 2
     done
+    if [ "$SSH_OK" != 1 ]; then
+      echo "ssh never became ready after 180s; stopping $INSTANCE" >&2
+      gcloud compute instances stop "$INSTANCE" --project="$PROJECT" --zone="$ZONE" || true
+      exit 1
+    fi
 
     # Sync. The VM has no `gh` and its credential manager cannot prompt over a
-    # non-tty ssh session, so the token is minted HERE and passed one-shot into
-    # the fetch URL. `-c credential.helper=` keeps it out of the VM's stored
-    # credentials; the grep scrubs it from the echoed output. It is never
-    # written to disk on the VM.
+    # non-tty ssh session, so a short-lived token is minted HERE. It travels
+    # over stdin into git's environment-variable config (GIT_CONFIG_*) on the
+    # VM: it never appears in any process command line (argv is visible in the
+    # process table and in 4688/script-block logs), is never written to disk
+    # VM-side, and dies with the ssh session. stdout AND stderr both pass
+    # through the scrub — git's own failure messages are the classic leak path
+    # (`fatal: unable to access 'https://x-access-token:...@github.com/...'`).
     echo "syncing $INSTANCE to $REF..."
     if command -v gh >/dev/null 2>&1 && [ -n "$REPO" ]; then
-      TOKEN="$(gh auth token)"
-      AUTH_REPO="$(echo "$REPO" | sed -E "s#^(https://)?(git@)?github.com[:/]#https://x-access-token:${TOKEN}@github.com/#")"
-      vm_ssh "cd $RVM; git -c credential.helper= fetch \"$AUTH_REPO\" $REF; git reset --hard FETCH_HEAD" | grep -v x-access-token
-      unset TOKEN AUTH_REPO
+      HTTPS_REPO="$(echo "$REPO" | sed -E "s#^(https://)?(git@)?github.com[:/]#https://github.com/#")"
+      B64="$(printf 'x-access-token:%s' "$(gh auth token)" | base64 | tr -d '\n')"
+      printf '%s\n' "$B64" | vm_ssh "\$b64 = [Console]::In.ReadLine(); \$env:GIT_CONFIG_COUNT = '1'; \$env:GIT_CONFIG_KEY_0 = 'http.https://github.com/.extraheader'; \$env:GIT_CONFIG_VALUE_0 = 'Authorization: Basic ' + \$b64; cd $RVM; git -c credential.helper= fetch $HTTPS_REPO $REF 2>&1; git reset --hard FETCH_HEAD 2>&1" \
+        | { grep -v -i -e 'x-access-token' -e 'authorization:' || true; }
+      unset B64 HTTPS_REPO
     else
-      vm_ssh "cd $RVM; git fetch origin $REF; git reset --hard FETCH_HEAD"
+      vm_ssh "cd $RVM; git fetch origin $REF 2>&1; git reset --hard FETCH_HEAD 2>&1"
     fi
 
     # Compiled Lua and panorama JS are gitignored build artifacts, so the fetch
@@ -132,18 +147,33 @@ case "${1:-}" in
     echo "staging vm-run.ps1..."
     vm_ssh "Copy-Item $RVM\\testrig\\vm-run.ps1 C:\\dota\\vm-run.ps1 -Force"
 
+    # Per-run knobs travel as a config file vm-run.ps1 dot-sources (see the
+    # header: `schtasks /run` has no argument channel). Values are safe to
+    # single-quote: addon names are `^[a-z][\d_a-z]+$` by construction.
+    echo "staging run-config.ps1 (addon=$ADDON mode=$RUN_MODE)..."
+    CONFIG_LOCAL="$(mktemp)"
+    printf "\$Addon = '%s'\n\$Mode = '%s'\n" "$ADDON" "$RUN_MODE" > "$CONFIG_LOCAL"
+    scp -P 2222 -i "$VM_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      "$CONFIG_LOCAL" "builder@localhost:C:/dota/run-config.ps1"
+    rm -f "$CONFIG_LOCAL"
+
     echo "triggering scheduled task $TASK_NAME..."
     vm_ssh "schtasks /run /tn $TASK_NAME"
 
     echo "polling $RESULT_FILE for completion..."
+    RUN_DONE=0
     for _ in $(seq 1 "$POLL_TICKS"); do
       sleep 30
       OUT="$(vm_ssh "Get-Content $RESULT_FILE" 2>/dev/null || true)"
       if echo "$OUT" | grep -q "RUN DONE"; then
         echo "run finished."
+        RUN_DONE=1
         break
       fi
     done
+    if [ "$RUN_DONE" != 1 ]; then
+      echo "WARNING: timed out after $((POLL_TICKS * 30))s without RUN DONE — retrieving whatever evidence exists" >&2
+    fi
 
     TS="$(date -u +%Y%m%dT%H%M%SZ)"
     OUTDIR="artifacts/$RUN_MODE/$TS"

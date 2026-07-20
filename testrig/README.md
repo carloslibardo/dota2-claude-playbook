@@ -7,8 +7,9 @@ install. GitHub-hosted runners have none of those, and never will.
 So instead of pretending, this rig builds the thing CI cannot be: a **remote,
 scheduled, self-scanning playtest**. One command on your laptop starts a
 Windows GPU VM, syncs your branch, rebuilds, plays a whole match with bots,
-captures screenshots and a video, greps the console log against a marker
-contract, ships the evidence back, and turns the VM off.
+captures screenshots (and an MP4, if ffmpeg is installed on the VM), greps the
+console log against a marker contract, ships the evidence back, and turns the
+VM off.
 
 You go and do something else. Twenty minutes later there is a directory on your
 disk containing a PASS or a FAIL and everything needed to argue with it.
@@ -19,16 +20,16 @@ disk containing a PASS or a FAIL and everything needed to argue with it.
 |---|---|---|
 | **VM definition** | `vm.sh create` | GCP `n1-standard-8` + one `nvidia-tesla-t4`, `windows-2022`, 200 GB SSD, `--maintenance-policy=TERMINATE` (required for GPU instances). |
 | **Provisioning** | `windows-startup.ps1` | Chocolatey → git + node. Creates a `builder` admin user, installs OpenSSH Server, injects your public key, makes PowerShell the default SSH shell. |
-| **Control plane** | `vm.sh` | `create · start · stop · ip · tunnel · ssh · run`. Everything parametrized by env var (`PROJECT`, `ZONE`, `INSTANCE`, `ADDON`, `REF`, `RUN_MODE`). |
+| **Control plane** | `vm.sh` | `create · start · stop · ip · tunnel · ssh · run`. Everything parametrized by env var (`PROJECT`, `ZONE`, `INSTANCE`, `ADDON`, `REF`, `RUN_MODE`). Per-run knobs reach the VM as a staged `run-config.ps1` that `vm-run.ps1` dot-sources — `schtasks /run` cannot pass arguments. |
 | **Access** | IAP tunnel → `localhost:2222` → `ssh builder@localhost` | Nothing listens on the public internet. No firewall rule for your home IP to keep updating. |
-| **Code sync** | inside `vm.sh run` | Token minted **on your laptop** with `gh auth token`, injected one-shot into the fetch URL with `-c credential.helper=` so it is never persisted VM-side, and scrubbed from the echoed output. Then `git reset --hard FETCH_HEAD`. |
+| **Code sync** | inside `vm.sh run` | Token minted **on your laptop** with `gh auth token`, sent over stdin into git's environment-variable config on the VM — never on a command line, never persisted VM-side — with stdout *and* stderr scrubbed defensively. Then `git reset --hard FETCH_HEAD`. |
 | **Rebuild on VM** | inside `vm.sh run` | Runs **both** `tstl` and `tsc --project src/panorama` on the VM. Compiled Lua and panorama JS are gitignored, so syncing source alone leaves the VM running last week's code. |
 | **Execution** | `schtasks /run /tn dota_run` | The crux. See below. |
 | **The run** | `vm-run.ps1` | `resourcecompiler` → launch `dota2.exe -tools -condebug +<convar> 1` → observe → scan → write a result file. |
-| **Observation** | inside `vm-run.ps1` | Full-screen PNG every 20 s via `System.Drawing.CopyFromScreen`. Optional MP4. Real mouse-click injection through `user32.dll` P/Invoke against the `SDL_app` window. |
+| **Observation** | inside `vm-run.ps1` | Full-screen PNG every 20 s via `System.Drawing.CopyFromScreen`. Optional MP4 via ffmpeg `gdigrab`, recorded only if ffmpeg is on the VM's PATH. Real mouse-click injection through `user32.dll` P/Invoke against the `SDL_app` window. |
 | **Verdict** | inside `vm-run.ps1` | Greps `console.log` for required positive markers and forbidden error patterns, writes `C:\dota-<mode>-result.txt`. |
-| **Retrieval** | `vm.sh run` | Polls the result file for a terminal token, `scp`s result + video + `console.log` + screenshots into `artifacts/<mode>/<UTC timestamp>/`, prints a summary, **stops the VM**. |
-| **Frame evidence** | `extract-frames.sh` | ffmpeg, 1 frame per 3 s across the whole run, or 15 fps over one narrow window. |
+| **Retrieval** | `vm.sh run` | Polls the result file for a terminal token, `scp`s result + `console.log` + screenshots + the MP4 (when recorded) into `artifacts/<mode>/<UTC timestamp>/`, prints a summary, **stops the VM**. |
+| **Frame evidence** | `extract-frames.sh` | ffmpeg over the retrieved MP4: 1 frame per 3 s across the whole run, or 15 fps over one narrow window. |
 
 ## The two non-obvious parts
 
@@ -103,6 +104,7 @@ PROJECT=my-gcp-project ./vm.sh create
 #    - install Dota 2 AND the Dota 2 Workshop Tools (beta branch)
 #    - clone your repo to C:\dota\repo and run `bun install`
 #    - register the scheduled task (see above)
+#    - optional: `choco install ffmpeg` if you want MP4s, not just screenshots
 
 # 3. From then on, every run is one command:
 PROJECT=my-gcp-project ADDON=hello_arena REF=my-branch ./vm.sh run

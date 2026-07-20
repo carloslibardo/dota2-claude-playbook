@@ -16,7 +16,7 @@ param(
   [string]$Addon       = "hello_arena",
   [string]$Map         = "",     # defaults to $Addon
   [string]$Mode        = "smoke",
-  [string]$Convar      = "hello_arena_e2e",
+  [string]$Convar      = "",     # defaults to "<addon>_e2e"
   [int]$Kills          = 5,      # bounded run: win threshold override
   [int]$RunSeconds     = 360,    # GPU/asset warmup (~2 min) + time to reach $Kills
   [int]$ShotInterval   = 20,     # seconds between screenshots
@@ -26,6 +26,17 @@ param(
 )
 
 $ErrorActionPreference = "Continue"
+
+# `schtasks /run` executes this script with the arguments the task was
+# REGISTERED with — there is no per-invocation argument channel. So vm.sh
+# stages C:\dota\run-config.ps1 (plain `$Addon = '...'` assignments) next to
+# this script, and dot-sourcing it here lets those values override the param
+# defaults above. Without this, ADDON/RUN_MODE set on the laptop silently do
+# nothing.
+$cfgFile = "C:\dota\run-config.ps1"
+if (Test-Path $cfgFile) { . $cfgFile }
+
+if (-not $Convar) { $Convar = "${Addon}_e2e" }
 if (-not $Map) { $Map = $Addon }
 
 $win64  = Join-Path $Dota "game\bin\win64"
@@ -62,6 +73,24 @@ $dotaArgs = @(
 "--- LAUNCH ---" | Add-Content $result
 ($dotaArgs -join " ") | Add-Content $result
 $proc = Start-Process -FilePath (Join-Path $win64 "dota2.exe") -ArgumentList $dotaArgs -PassThru
+
+# Optional MP4: if ffmpeg is on PATH (choco install ffmpeg during VM setup),
+# record the desktop for the whole run. gdigrab captures the same session-1
+# display head the screenshots use; -t bounds the recording so the recorder
+# can never outlive the run. Screenshots answer "did it work"; the MP4 is what
+# extract-frames.sh mines when you need to see a one-second event.
+$video = "C:\dota-$Mode.mp4"
+$rec = $null
+$ffmpeg = Get-Command ffmpeg -ErrorAction SilentlyContinue
+if ($ffmpeg) {
+  Remove-Item $video -Force -ErrorAction SilentlyContinue
+  $ffArgs = @("-y", "-f", "gdigrab", "-framerate", "15", "-t", "$RunSeconds",
+              "-i", "desktop", "-vf", "scale=1280:-2", "-pix_fmt", "yuv420p", $video)
+  $rec = Start-Process -FilePath $ffmpeg.Source -ArgumentList $ffArgs -PassThru -WindowStyle Hidden
+  "recording: $video (ffmpeg pid $($rec.Id))" | Add-Content $result
+} else {
+  "recording: skipped (no ffmpeg on PATH)" | Add-Content $result
+}
 
 # ---------------------------------------------------------- 3. observe
 # Screenshots are the difference between "the log says it worked" and knowing
@@ -118,12 +147,21 @@ function Invoke-ClickSweep {
 }
 
 $elapsed = 0
+# Two sweeps: one soon after the match goes live, one later in case the HUD
+# was still loading during the first. -ge plus a fired-flag, NOT -eq: with a
+# non-default -ShotInterval, $elapsed may never land exactly on these values,
+# which would silently disable input injection.
+$sweepTimes = @(140, 220)
+$sweepsFired = @{}
 while ($elapsed -lt $RunSeconds) {
   Start-Sleep -Seconds $ShotInterval
   $elapsed += $ShotInterval
-  # Two sweeps: one soon after the match goes live, one later in case the HUD
-  # was still loading during the first.
-  if ($elapsed -eq 140 -or $elapsed -eq 220) { Invoke-ClickSweep -Tag "t$elapsed" }
+  foreach ($t in $sweepTimes) {
+    if ($elapsed -ge $t -and -not $sweepsFired[$t]) {
+      $sweepsFired[$t] = $true
+      Invoke-ClickSweep -Tag "t$t"
+    }
+  }
   try {
     $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
     $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
@@ -137,6 +175,14 @@ while ($elapsed -lt $RunSeconds) {
 "screenshots: $((Get-ChildItem $shots -Filter *.png).Count)" | Add-Content $result
 "process alive at kill: $(-not $proc.HasExited)" | Add-Content $result
 if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+
+# Let ffmpeg finalize the MP4 (its -t should have expired with the loop; give
+# it a moment to flush the moov atom, then insist).
+if ($rec -and -not $rec.HasExited) {
+  $rec | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue
+  if (-not $rec.HasExited) { Stop-Process -Id $rec.Id -Force -ErrorAction SilentlyContinue }
+}
+if (Test-Path $video) { "video: $video ($([math]::Round((Get-Item $video).Length / 1MB, 1)) MB)" | Add-Content $result }
 
 # ---------------------------------------------------------- 4. verdict
 $failures = @()

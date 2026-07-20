@@ -4,10 +4,17 @@
 {
 	"npc_dota_hero_windrunner"
 	{
-		"override_hero"					"npc_dota_hero_windrunner"
+		// No "override_hero" here: the block key IS the base hero name, and
+		// that is the whole pattern. The old approach — a "_custom" key with
+		// "override_hero" pointing at the base — produces heroes that cannot
+		// be spawned independently (CreateHeroForPlayer fails with
+		// "unit ... is invalid"). See playbook landmine L2.
 
 		// A skillshot-only mode: strip the right-click so all damage has to
-		// flow through abilities you control.
+		// flow through abilities you control. NO_ATTACK is what actually
+		// removes the attack; the 1-damage floor is a fallback for anything
+		// that force-attacks regardless.
+		"AttackCapabilities"			"DOTA_UNIT_CAP_NO_ATTACK"
 		"AttackDamageMin"				"1"
 		"AttackDamageMax"				"1"
 		"AttackRate"					"2.0"

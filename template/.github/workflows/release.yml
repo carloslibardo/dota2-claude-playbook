@@ -5,13 +5,17 @@ name: Release (Workshop publish)
 # a SELF-HOSTED Windows runner registered on the machine that has the tools.
 #
 # DISABLED by default (`if: false`). To enable:
-#   1. Do the first publish via the GUI to mint the Workshop item ID
-#      (see docs/PUBLISHING.md).
+#   1. Do the first publish to mint the Workshop item ID. steamcmd's
+#      `+workshop_build_item` can both CREATE and update items headlessly —
+#      the manual residue is the Steam Guard login and accepting the Workshop
+#      Legal Agreement. Recipe: ../../playbook/08-publishing-ceiling.md.
 #   2. Register a self-hosted runner on that Windows box with labels
 #      [self-hosted, windows, dota-tools].
 #   3. Add repo secrets: WORKSHOP_ID, STEAM_USER (the runner's Steam session
 #      must already be Steam-Guard-approved for that account).
-#   4. Verify scripts/publish.ps1 succeeds MANUALLY once, then set `if:` to true.
+#   4. Write scripts/publish.ps1 for your addon — this template does NOT ship
+#      one; the steamcmd recipe it should wrap is in the chapter above. Verify
+#      it succeeds MANUALLY once, then set `if:` to true.
 
 on:
   push:
@@ -27,6 +31,9 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Build, cook, upload to Workshop
         shell: pwsh
+        # scripts/publish.ps1 is YOURS to write (step 4 above) — it is not part
+        # of the template, because half of it is choices only you can make
+        # (preview image, description source, visibility).
         run: >
           pwsh scripts/publish.ps1
           -WorkshopId ${{ secrets.WORKSHOP_ID }}
