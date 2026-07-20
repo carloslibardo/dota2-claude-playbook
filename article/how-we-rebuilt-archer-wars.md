@@ -250,7 +250,7 @@ Run the classifier on your own project. The ratio is the most honest description
 
 ## An honest note on the numbers
 
-I said "318 commits" in the launch thread. Counting properly afterwards: **274 commits on `main`**, **352 across all refs** (branches, worktrees, unmerged work). 318 was a number from a partial count, sitting between the two real ones. I'm leaving the correction here rather than quietly fixing the post, because a piece arguing "prove it, don't claim it" doesn't get to round its own stats.
+I said "318 commits" in the launch thread. Counting properly afterwards, at the end of the ten-day build: **274 commits on `main`**, **352 across all refs** (branches, worktrees, work still unmerged at the time). 318 was a number from a partial count, sitting between the two real ones. I'm leaving the correction here rather than quietly fixing the post, because a piece arguing "prove it, don't claim it" doesn't get to round its own stats.
 
 Two more corrections in the same spirit:
 

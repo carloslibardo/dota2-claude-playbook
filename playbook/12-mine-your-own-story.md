@@ -296,7 +296,8 @@ re-derived in that session.
 
 Counting afterwards: **352 commits across all local refs** (366 counting remote-only branches;
 an earlier sweep read 365 before a docs commit landed), **274 on `main`**. The gap is real work on
-unmerged branches — notably a spec branch sitting 45 commits ahead of `main` — plus the fact
+branches unmerged at the time of counting — notably a spec branch then sitting 45 commits
+ahead of `main`, since merged — plus the fact
 that four squash-merged pull requests on `main` each carry roughly twenty underlying branch
 commits. So `main`'s commit count *understates* the work by a lot, and the all-refs count
 includes branches that were never merged.
@@ -396,7 +397,9 @@ close to zero.
   cannot recover it.
 - **Squash provenance is the only link to ~80 branch commits.** Four commits on `main` are
   squashes of four spec branches. Rewriting severs the relationship GitHub currently renders.
-- **A live 45-commit branch would need rebasing** — and it holds the newest work.
+- **A live 45-commit branch would need rebasing** — at decision time it was 45 commits ahead
+  of `main` and held the newest work. (It has since merged normally, which is the cheap
+  outcome a rewrite would have put at risk.)
 - **A concurrent Claude session had five worktrees registered against those refs.** A force-push
   underneath it produces exactly the detached-HEAD confusion that a project memory entry was
   written to prevent.
