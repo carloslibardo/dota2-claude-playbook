@@ -68,7 +68,7 @@ autonomous run needs a heartbeat that distinguishes "finished quietly" from "die
 
 Pure logic goes in a `lib/` that unit-tests on your laptop in seconds with no game engine
 present; the expensive rig is reserved for what only the rig can prove. We ended the build at
-375 tests across 47 files running on a Mac with Dota not even installed — 653 across 59 after
+375 tests across 47 files running on a Mac with Dota not even installed — 705 across 63 after
 the review pass — covering bot decisions, arena geometry, shop eligibility and hysteresis
 bands. A recorded VM run took thirteen minutes.
 Everything you can move from the second lane to the first lane you should.
