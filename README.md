@@ -79,7 +79,7 @@ Then read [chapter 4](playbook/04-landmines.md) before you write anything.
 | 12 | [Mine your own story](playbook/12-mine-your-own-story.md) | Your transcripts hold your true numbers and your best material. How to extract both. |
 
 There is also [`article/`](article/) — the long-form write-up of the Archer Wars
-build itself, and the launch-post draft that goes with it.
+build itself.
 
 ## What is genuinely novel here
 
