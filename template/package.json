@@ -3,6 +3,9 @@
     "private": true,
     "scripts": {
         "postinstall": "node scripts/install.js",
+        "init": "bun scripts/init.ts",
+        "link": "node scripts/install.js --link",
+        "unlink": "node scripts/install.js --unlink",
         "launch": "node scripts/launch.js",
         "build": "run-p build:*",
         "build:panorama": "tsc --project src/panorama/tsconfig.json",

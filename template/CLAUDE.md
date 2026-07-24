@@ -12,12 +12,24 @@ TypeScriptToLua. Free-for-all, first to 10 kills.
 ## Commands
 
 ```bash
-bun install        # deps + postinstall symlinks game/ and content/ into dota_addons/
+bun install        # dependencies ONLY. Never touches a Dota install
+bun run init <name>  # rename this project (idempotent, re-runnable, no network)
 bun run build      # TS -> Lua (tstl) + panorama (tsc). run-p build:*
 bun run dev        # both compilers in --watch
 bun run test       # vitest, pure-logic unit tests (run anywhere, no Dota needed)
-bun run launch     # start Dota 2 with -tools -addon hello_arena (needs Dota installed)
+
+bun run link       # OPT-IN: MOVES game/ and content/ into dota_addons/hello_arena,
+                   # leaving symlinks behind. Needed before `launch`
+bun run launch     # start Dota 2 -addon hello_arena. Workshop Tools are Windows-only
+bun run unlink     # reverse the link, moving both directories back here
 ```
+
+**Never run a Dota-linking step implicitly.** `bun run link` *moves* `game/`
+and `content/` out of the project into the user's Steam install. It is correct
+when developing the addon and destructive-feeling when it is a surprise, so it
+is opt-in and stays opt-in: do not move it back into `postinstall`, and do not
+run it on someone's machine without being asked. It is the only step here that
+reaches into a Dota install at all.
 
 CI (`.github/workflows/ci.yml`) runs typecheck on both tsconfigs, the full
 build, and vitest on every push and PR — on ubuntu, with no Dota installed.
@@ -33,22 +45,40 @@ build, and vitest on every push and PR — on ubuntu, with no Dota installed.
 | `src/common/` | Types shared by vscripts and panorama (events, net tables) |
 | `src/panorama/` | UI TS -> `content/panorama/scripts/custom_game/` |
 | `game/`, `content/` | Dota addon dirs (KV data, layouts, maps). Compiled output here is **gitignored** |
-| `scripts/` | install / launch helpers |
+| `scripts/` | init (rename) / install (link) / launch helpers |
 | `docs/specs/` | One directory per feature: spec + plan + marker contract (templates provided) |
-| `.claude/skills/` | Process: `/sdd-feature`, `/landmine-check`. Craft: `/tstl-lua-gotchas`, `/ability-modifier-patterns`, `/kv-authoring`, `/panorama-ui` |
+| `.claude/skills/` | The skills below. Read the one that matches before writing code |
+
+## Which skill, when
+
+Invoke the skill **before** writing the code, not after it breaks.
+
+| Reach for | When |
+|---|---|
+| `/sdd-feature` | Starting any feature, ability, item, or system. The six-gate loop |
+| `/ability-modifier-patterns` | Writing an ability, item, or modifier |
+| `/new-hero-authoring` | Adding or reworking a playable hero or a summoned unit |
+| `/kv-authoring` | Touching anything under `game/scripts/npc/` or `game/resource/` |
+| `/panorama-ui` | Touching anything under `src/panorama/` or `content/panorama/` |
+| `/tstl-lua-gotchas` | Any `src/vscripts/` work — truthiness, GC, handle hygiene |
+| `/evidence-gate` | About to claim something works, or judging such a claim |
+| `/vm-testrig` | Running the headless playtest, or writing the e2e harness |
+| `/debug-silent-failures` | Something does not work and there is no error |
+| `/landmine-check` | Before committing anything touching heroes, abilities, particles, bots, KV, panorama, or spawns |
+| `/workshop-publish` | Cooking and uploading to the Steam Workshop |
 
 ## Workflow
 
-New features follow the SDD loop — invoke the `/sdd-feature` skill when
-starting one: spec → plan → **marker contract** → implement → **evidence** →
-**landmine**. Before committing anything that touches heroes, abilities,
-particles, bots, KV, panorama, or spawns, run `/landmine-check`.
+New features follow the SDD loop — invoke `/sdd-feature` when starting one:
+spec → plan → **marker contract** → implement → **evidence** → **landmine**.
+The last three arrows are the ones that catch this engine: the contract is
+written before the code, the evidence is a frame and not a log line for
+anything visual, and a surprise that cost an hour gets appended to the
+invariants below before the feature closes.
 
-Craft skills — invoke by area before writing code there:
-`/tstl-lua-gotchas` for any vscripts work (truthiness, GC, handle hygiene),
-`/ability-modifier-patterns` for abilities/items/modifiers,
-`/kv-authoring` for anything under `game/scripts/npc/` or `game/resource/`,
-`/panorama-ui` for anything under `src/panorama/` or `content/panorama/`.
+A feature typically walks: `/sdd-feature` → the craft skill for the area →
+`/evidence-gate` → `/vm-testrig` if it needs a real match → `/landmine-check`
+→ commit.
 
 ## Architecture invariants
 

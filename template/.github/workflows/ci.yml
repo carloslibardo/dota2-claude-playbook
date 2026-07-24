@@ -5,9 +5,10 @@ on:
   pull_request:
 jobs:
   build:
-    # ubuntu, with no Dota 2 anywhere in sight. `scripts/install.js` detects the
-    # missing Steam install and no-ops, so everything below still runs: this is
-    # real CI for a Valve game mod.
+    # ubuntu, with no Dota 2 anywhere in sight. `scripts/install.js` runs as
+    # postinstall and only ever reports what it found — linking is the explicit
+    # `bun run link` — so everything below runs anywhere: real CI for a Valve
+    # game mod.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

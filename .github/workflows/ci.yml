@@ -14,7 +14,7 @@ defaults:
 jobs:
   build:
     # ubuntu, with no Dota 2 anywhere in sight. The postinstall
-    # (scripts/install.js) detects the missing Steam install and no-ops.
+    # (scripts/install.js) only ever reports; linking is `bun run link`.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,3 +24,20 @@ jobs:
       - run: bunx tsc --noEmit -p src/panorama/tsconfig.json
       - run: bun run build
       - run: bunx vitest run --passWithNoTests
+
+  scaffold:
+    # The README's "start building in 5 minutes" claim, executed. Copies the
+    # template out of the repo the way `degit` would, renames it, and requires
+    # the result to be green with no template naming left in it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Copy the template out of the repo
+        run: cp -R . "${{ runner.temp }}/my_game"
+      - name: Rename, install, build and test
+        working-directory: ${{ runner.temp }}/my_game
+        run: bun run init my_game
+      - name: No template naming survives the rename
+        working-directory: ${{ runner.temp }}/my_game
+        run: '! grep -rniE "hello[_ ]?arena" --exclude-dir=node_modules .'

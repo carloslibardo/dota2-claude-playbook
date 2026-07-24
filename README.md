@@ -9,7 +9,7 @@ Three things live here:
 | | |
 |---|---|
 | **[`playbook/`](playbook/)** | Thirteen chapters on the parts that are actually hard: the engine's silent failures, testing something CI cannot run, and what the process has to look like when an agent is doing the typing. |
-| **[`template/`](template/)** | A ~50-file custom game — half of them one-line stubs the engine insists on — that builds, tests, and passes CI with **no Dota installed**. Clone it, change one name, start writing your game. |
+| **[`template/`](template/)** | A ~50-file custom game — half of them one-line stubs the engine insists on — that builds, tests, and passes CI with **no Dota installed**, plus eleven Claude Code skills covering the build loop end to end. One command renames it into your game. |
 | **[`testrig/`](testrig/)** | A GPU VM that plays your game for you, screenshots it, greps the log against a marker contract, ships back the evidence, and turns itself off. |
 
 ## Who this is for
@@ -25,18 +25,38 @@ Much of it generalizes past Dota. If you are building anything an agent can
 write but cannot run — a game, a renderer, a desktop app — chapters 3, 5, 6, and
 10 are about that problem in general.
 
-## Quickstart
+## Start building in 5 minutes
 
 ```bash
-git clone <this repo>
-cd dota2-claude-playbook/template
-bun install && bun run build && bun run test
+bunx degit carloslibardo/dota2-claude-playbook/template my_game
+cd my_game
+bun run init my_game       # renames everything, then builds and tests to prove it
 ```
 
-That passes on macOS or Linux with no Dota 2 anywhere on the machine, because
-`scripts/install.js` detects the missing Steam install and skips the linking
-step. On a machine that *does* have Dota, the same command links the addon into
-your install and `bun run launch` opens it in tools mode.
+`init` rewrites the addon name across `package.json`, `addoninfo.txt`, the net
+tables, the convars, the localization and the docs, then runs
+`bun install && bun run build && bun run test` in front of you. It is
+re-runnable, needs no network beyond the dependency fetch, and touches nothing
+outside the project directory.
+
+Then open Claude Code in that directory and describe what you want to build. It
+reads `CLAUDE.md` on the way in — the engine invariants, and a table saying
+which skill to reach for when.
+
+<details>
+<summary>Prefer a clone</summary>
+
+```bash
+git clone https://github.com/carloslibardo/dota2-claude-playbook.git
+cp -R dota2-claude-playbook/template my_game
+cd my_game && bun run init my_game
+```
+
+</details>
+
+All of that passes on macOS or Linux with **no Dota 2 anywhere on the machine**.
+With Dota installed, `bun run link` wires the addon into it — explicitly, never
+as a side effect of installing dependencies — and `bun run launch` opens it.
 
 Then read [chapter 4](playbook/04-landmines.md) before you write anything.
 
