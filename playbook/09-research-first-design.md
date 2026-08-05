@@ -11,7 +11,7 @@ implementing, the problem compounds — a model asked to "make it like the
 original" will confidently produce something plausible, and plausible is
 indistinguishable from sourced unless you wrote down which was which.
 
-This chapter is the discipline that fixes it. It is three rules.
+This chapter is the discipline that fixes it. It is four rules and one audit.
 
 ## Rule 1 — every fact carries its source
 
@@ -89,9 +89,82 @@ which is a distinction it will otherwise happily blur. If you have raw source
 material — decompiled files, archived pages, screenshots — keep it in a clearly
 separated area, and do not ship it as part of anything you publish.
 
+## Rule 4 — the research pass produces a feature checklist, not just facts
+
+Rules 1 through 3 make every fact you wrote down trustworthy. They say nothing
+about the facts you never wrote down, and that is the gap that ships broken
+games.
+
+Pudge Wars, 2026-07-27. "Traditional Pudge Wars" had been researched properly:
+sourced facts, tagged, a spec, a marker contract, gates. Run 13 was rejected by
+the reviewer for a reason no gate could have raised — **nothing ever spawned in
+the river.** The river-item mechanic is as canonical to Pudge Wars as the hook
+itself, and it had never been specced. Not deferred, not descoped, not decided
+against. It had simply never been written down, so nothing downstream could
+possibly notice its absence. The research had been mined only for the pieces
+that were already known to be broken.
+
+> **Unwritten = unshipped = undetectable.** A missing feature is invisible to
+> every mechanism in this playbook. Tests check what exists. Gates check what
+> the contract names. Frame review checks what is on screen against what you
+> expected to be on screen — and if you never expected it, the frames look fine.
+
+So the research pass has a second deliverable beside the tagged facts: **an
+explicit feature checklist of the reference game.** Enumerate what X *is*,
+exhaustively, at the granularity of "a player would name this as part of the
+game" — every mechanic, mode, item class, map element, win condition, ritual.
+
+Then every line on that checklist gets exactly one of three dispositions, and
+none of them is silence:
+
+```
+- Hook (skillshot, drags target)          -> spec 002
+- Two fields + river arena                -> spec 006
+- River items / gift chests               -> spec 009
+- Rot (toggle AoE damage aura)            -> spec 003
+- Hook-length upgrade shop                -> spec 005
+- Team scoreboard taunts                  -> OUT OF SCOPE (no chat UI this milestone)
+- 1v1 duel mode                           -> OUT OF SCOPE (deferred to v2)
+- Random-hero mutator                     -> USER DECISION (asked 2026-07-27, pending)
+```
+
+A **spec** means it is being built and something will gate it. **Out of scope**
+means it was seen and deliberately dropped, with a reason — which is a
+completely different artifact from an omission, because it can be revisited.
+**User decision** means the call is not yours and the checklist is now the thing
+that stops it from being quietly made by default.
+
+The checklist is also the cheapest audit in this chapter. Read it beside the
+spec directory and any line with no disposition is a hole you can see in ten
+seconds. Read the spec directory alone and you cannot see holes at all — a
+directory of five good specs looks exactly like a directory of five good specs
+that is missing a sixth.
+
+## The design-integrity audit: incentives versus enforcement
+
+One more sweep belongs at design time, and it is a different *kind* of audit
+from everything else in this book. Every other check here asks "is this system
+correct?" This one asks "do two correct systems want opposite things?"
+
+Pudge Wars again. Spec 008 established that the river is never a resting state —
+an order filter kept bots out of the water, and a stranded-return sweep pulled
+back anything that ended up there. Spec 004, written earlier, gave the river
+**+30 HP/s regeneration**. Both specs were internally coherent, individually
+implemented, individually tested. Together they were enforcement fighting
+incentive: the design paid players to stand in the exact place the design
+forbade them to stand, and the resulting behaviour — bots repeatedly drawn in
+and repeatedly ejected — looked like a pathfinding bug for a while, because it
+manifests as motion, not as an error. The resolution was a design call (flip the
+river from reward to hazard), made explicitly once the contradiction was
+written down. **Scan the design for mechanics that reward what another system
+forbids, and resolve the contradiction on paper — the alternative is discovering
+it as behaviour, where it wears the costume of a bug.**
+
 ## Structure
 
-A research document that works has four sections beyond the facts themselves:
+A research document that works has four sections beyond the facts themselves —
+five, counting the feature checklist from rule 4, which is usually large enough
+to earn its own file:
 
 **Sources**, listed up front with what each one is and how reliable you judge
 it. This is what the bracketed tags dereference to.
@@ -122,6 +195,7 @@ The workflow that follows:
 
 ```
 research doc (tagged facts + DESIGN-FRESH gaps + unknowns)
+  -> feature checklist   every line: spec / out-of-scope / user decision
   -> spec        cites the research for every parameter table
   -> plan        "values verbatim from the spec table"
   -> implement   KV files carry the numbers, code reads them back
@@ -139,5 +213,7 @@ specific to one reconstruction, it may contain material with its own licensing
 situation, and it is not reusable by anyone else.
 
 Ship the **method**: sourced-fact tagging, `DESIGN-FRESH` for gaps, unknowns
-kept as questions, discrepancies recorded, and a clean-room notice at the top.
-That is the part that transfers.
+kept as questions, discrepancies recorded, a feature checklist where every line
+carries a disposition, an incentives-versus-enforcement sweep before
+implementation, and a clean-room notice at the top. That is the part that
+transfers.

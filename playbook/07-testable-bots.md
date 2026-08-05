@@ -7,7 +7,7 @@ the game testable at all. Every recorded verification run in this project is a b
 
 That inverts the usual priority. If the bots are the test rig, the bots have to be more
 trustworthy than the game, and they have to be debuggable without booting the game. This
-chapter is how we got there, and the four pathologies we hit on the way.
+chapter is how we got there, and the five pathologies we hit on the way.
 
 The short version: **the decision logic must be pure enough to run on a laptop in
 milliseconds, and the tick loop must issue commitments rather than recomputations.** Almost
@@ -223,6 +223,28 @@ real speed. So the bots dodged arrows that had already passed them. The fix was 
 the moment a feature changes one of its inputs. Make the model take the real value as a
 parameter rather than assuming a constant.
 
+### Watchdogs must escalate to a different place
+
+The other half of stuck-handling is the rescue itself, and it has a failure mode of its own.
+Pudge Wars run 19 (2026-07-28) still showed a residual micro-lock after four rounds of fixes:
+bots pinned in place, the stuck watchdog firing correctly, and nothing changing. The watchdog's
+rescue action was a `FindClearSpace` nudge — issued at the bot's own current position. Which
+is, of course, exactly the state it was rescuing the bot from. The watchdog ran, logged, and
+did nothing, forever, at whatever frequency it was set to.
+
+> **A watchdog's rescue action must be provably DIFFERENT from the state it rescues.** If the
+> escape can resolve to "where you already are," it is not an escape. Displace by a real
+> distance in a chosen direction, or teleport, and assert the delta.
+
+There is a second, harder-earned rule sitting next to it. Every one of those runs was a
+behaviour fix, and **four of five Pudge Wars regressions in that arc were introduced by the
+previous fix**: a hysteresis change parked bots at the entry HP threshold (run 15); a
+survivability stack starved the kill pace (run 16); a re-hook reset the stranded clock forever
+and produced a perma-brawl (run 17). Bot behaviour is a coupled system where every constant is
+load-bearing for some other subsystem's gate. So: **every behaviour fix is re-judged by the
+FULL gate set, not by the gate it was written to turn green.** A fix that lands one marker and
+silently breaks another is the normal case, not the surprising one.
+
 ## 7.5 Hysteresis bands, not boolean gates
 
 The third pathology: **funded bots never bought anything.** They accumulated gold all match
@@ -268,6 +290,35 @@ enduring the friction:
 > `give me 20k of money to allow test it witout fricction` [sic]
 
 Ten minutes of work, used for the rest of the project. Build the affordance.
+
+### Ability points do not spend themselves
+
+The same category, discovered the expensive way on Pudge Wars run 2 (2026-07-26). Nine live
+bots converged, moved, fought, and printed exactly zero `[HOOK]` lines. Nothing was broken.
+The hook was at **level 0**, and a level-0 ability is uncastable — `IsFullyCastable()` returns
+false, the order is discarded, and nothing anywhere says why. A human player spends points
+without thinking about it; a fake client never will, because nobody is clicking the plus
+buttons.
+
+So every bot-driven e2e needs an explicit leveling loop, and it needs two properties:
+
+**Spread lowest-level-first, not slot order.** Run 4 passed with slot-order leveling and
+shipped Rot with literally zero ticks — points went into the first ability until it capped, so
+the later abilities never came online and their gates could never see anything. Lowest-first
+guarantees every ability reaches level 1 before any reaches level 2, which is what an evidence
+run wants even though it is not what a player wants.
+
+**Watch the dilution trap.** The spread is a fixed budget divided by the kit size, so *every
+ability you add dilutes it.* Run 18 failed its pace gate purely from this: three new actives
+landed, the same XP now bought level 1 across six abilities instead of three, and level-1
+combat could not close against level-1 escapes. The fix is not more XP — it is noticing. **Pin
+a pace gate (kills inside the window) and re-check it whenever the kit grows.**
+
+The affordance that makes the loop cheap is an XP grant at the horn — Pudge Wars boosts 1300
+XP the moment the match starts, which puts the whole kit at level 1 before the first
+engagement. Note the arithmetic, because it bit us: the level-3 curve step is 640, so 600 XP
+buys *two* points, not three. Compute the boost from the actual curve, log the resulting
+levels, and you get a bounded, verifiable window between "match starts" and "kit is online."
 
 ## 7.6 Difficulty is a table, not an algorithm
 
@@ -326,6 +377,99 @@ None of those improve the bot as an opponent. All of them improve the bot as a c
 operator and stunt double. If your bots are going to carry your verification, budget for that
 second job explicitly — it is a real chunk of work and it does not look like AI programming.
 
+### The recording host can play the match
+
+The demonstrator mode above solves the HUD problem by giving the recording host a hero. Pudge
+Wars pushed it one step further, and the step is small enough to be worth copying: **let the
+host's hero be driven by the bot FSM like every other seat.** Include player id 0 in the bot
+roster, and skip it in any harness XP or gold boost so it levels on camera at the same rate as
+the match it is in.
+
+With `+dota_camera_lock` on that hero, the recording is centred player-POV footage of a real
+match — the host hunts, hooks, gets hooked, buys, dies, respawns — with a live HUD, a real
+inventory bar, and a camera that cannot wander off the fight because the fight is wherever the
+subject is. That is how the Pudge Wars handover video was shot. It costs one line in the
+roster and one exclusion in the boost, and it replaces both the "camera never framed the
+action" failure and the "HUD is empty because the subject is a bot" failure at once.
+
+(The other camera route — parking an invisible invulnerable host hero mid-arena as a tripod —
+frames both sides for the whole match and is better for *layout* evidence. Pick by what the
+run has to prove: POV for feel and HUD, tripod for shape.)
+
+### Gate on a mechanism you cannot reach, and you have to build a probe
+
+Pudge Wars had a river that burns anything standing in it. It also had an order filter that
+keeps bots out of the water by construction. Both correct — and together they made the hazard
+gate **unpassable**: in a healthy run, no bot ever enters the river, so `[RIVER] burn` never
+prints, so the gate that proves the hazard works can only ever fail.
+
+The answer is not to delete the gate or to weaken the enforcement that made it unreachable.
+It is to have the harness **manufacture the state**: teleport one bot into the water for five
+seconds, on camera, then release it. The mechanism gets exercised, the marker fires, and the
+frame reviewer gets a visible burn to point at.
+
+> **A gate on a mechanism that healthy behaviour can never reach is a probe, not an
+> assertion.** Write the probe deliberately, keep it inside the same tools-mode + convar
+> interlock as the rest of the harness, and make it produce frames as well as markers.
+
+One caveat that cost a run: **a probe has to survive the game's own lethality.** A stationary
+bot parked in the open, in a meta where hooks kill, is a free kill — the probe died before
+completing its five seconds and the gate failed for reasons that had nothing to do with the
+mechanism under test. Probes need the same robustness as any other actor: retry on death,
+bound the number of attempts, and log which attempt produced the evidence.
+
+## 7.8 A flatlined rate that smells like dice and is actually geometry
+
+The fifth pathology, and the only one in this chapter that was solved with arithmetic on
+paper before a line of code changed. Pudge Wars, three consecutive runs (2026-08-02):
+**`[DODGE]` fired roughly once per hundred hooks.** The dodge chance in the difficulty table
+was 45%. Hundreds of hooks were flying. One in a hundred was being dodged.
+
+Everything about that shape says *random number generator*. A rate that is not zero but is
+absurdly low reads as a botched roll, a wrong seed, an injected RNG returning something
+degenerate, a threshold comparison flipped. That is where an afternoon goes if you let it.
+
+The cause was in a different subsystem entirely, and it is a coupling worth naming.
+
+**The shooters aim with intercept lead.** Skillshot bots do not fire at where the enemy is;
+they solve for where the enemy *will be* when the projectile arrives, and fire there. Against
+a strafing target at Pudge hook speed, that predicted point sits up to **~165 units** away
+from where the target is standing at the instant of launch.
+
+**The dodgers computed threat against where they were standing.** The threat model took the
+hook's flight line and asked for its closest approach to the bot's current position, with a
+tolerance of `radius + 60`. A led shot's line passes *through the predicted point* — by
+construction, well outside a 60-unit skirt around the present one. So the dodger looked at a
+hook aimed precisely at it, computed "passes wide," and did nothing. The 1-in-100 that did
+fire were the shots at targets that happened not to be moving.
+
+The fix was one constant: widen the self-radius to 150, covering the lead envelope. It fixed
+it in a single run.
+
+Two rules come out of it, and the second is the more useful one.
+
+> **The threat model must mirror the aim model.** Whatever lead the shooter computes, the
+> dodger's tolerance has to cover — they are two halves of one geometry, and they are usually
+> written weeks apart by different reasoning. Any time you change how the shooter predicts,
+> re-derive what the dodger tolerates.
+
+This is the same failure as the Raiju's Longbow speed drift in §7.4, one level up: there the
+model held a stale *constant*, here it held a stale *assumption about the opponent's
+algorithm*. Both are the bot's world-model diverging from the world.
+
+> **Before blaming variance, compute the expected trigger rate from the geometry.** A
+> five-minute calculation — how far does the aim point move, how wide is the tolerance, what
+> fraction of shots can therefore ever qualify — predicts ~1% and points straight at the
+> constant. Randomness is the most seductive available explanation for a low rate, and it is
+> unfalsifiable by inspection, so it will absorb as much debugging time as you give it.
+
+Generalized: when a stochastic-looking system produces a rate you did not expect, derive the
+rate you *should* expect from first principles before touching the RNG. If the geometry
+already explains the number, the dice were never involved. This is the statistical sibling of
+§7.3's counter panel — there you count the pipeline stages to find where events vanish; here
+you compute the rate the design implies and compare it to the rate observed. Both replace a
+theory with an arithmetic.
+
 ---
 
 ## Checklist
@@ -338,6 +482,14 @@ second job explicitly — it is a real chunk of work and it does not look like A
 - [ ] State transitions in the hot loop use bands with separate enter/exit thresholds.
 - [ ] Difficulty (and any behavioural variation) is a table, not a branch.
 - [ ] There is a counter module that reports per-second event counts at each pipeline stage.
+- [ ] The threat/dodge model's tolerance covers the aim model's full lead envelope.
+- [ ] An unexpected rate gets an expected-rate calculation before it gets an RNG hypothesis.
+- [ ] The e2e harness levels bot abilities — lowest-level-first — and the spread is re-checked
+      against a pace gate whenever the kit grows.
+- [ ] Every watchdog's rescue action is provably different from the state it rescues.
+- [ ] Every behaviour fix is re-judged against the full gate set, not just its own gate.
+- [ ] Any gate on a mechanism healthy behaviour cannot reach has a probe, and the probe
+      survives being killed.
 - [ ] Every constant that came from an incident has a dated comment saying which one.
 
 **Related:** [chapter 5, testing without the engine](05-testing-without-engine.md) ·

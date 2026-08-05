@@ -247,6 +247,40 @@ The first time an agent did this and reported back, the sentence was:
 
 It is a small sentence, and it is the whole thesis.
 
+### The other half: a feature has to be *built* to be visible
+
+Everything above is the verification side — look harder, at the right frames. There is a
+design side, and it took a second project to find it, because no amount of looking fixes a
+feature that is not on screen long enough to be looked at.
+
+Pudge Wars, 2026-07-29. The field report on a build that was marker-green *and* frame-verified
+listed, among other things: "I didn't see any item on the river" and "nobody shops." Both were
+false as statements about the code and completely true as statements about the experience. Run
+23 had spawned **29** river chests; the bots hunted them so efficiently that most were taken
+within about a second of appearing. The shop was worse — purchases were instantaneous grants,
+economically correct, gold debited, items in inventories, and visually nonexistent. Nothing
+was broken. Nothing was visible.
+
+That is not a rendering bug and it is not a verification failure. It is a *design* failure,
+and the fixes are design fixes, in two families:
+
+**Minimum dwell windows.** A chest sits on the river for six seconds before anyone may take
+it. The mechanic is unchanged; the evidence window is now longer than a glance.
+
+**Physical enactment.** Buying stops being an instant grant and becomes a bot walking to a
+glowing pad and standing on it. The economy is identical. The difference is that the sentence
+"bots shop" now has a picture.
+
+> **If a feature's evidence window is shorter than a glance, gate on the window, not the
+> event.** An event counter of 29 chests and a video with no chests in it are both accurate.
+
+The operational form of this is a line in the spec, not a note in a review. **Every
+player-facing system names, in its own spec, the on-screen artifact a frame reviewer must be
+able to point at** — the overhead gold alert for a purchase, the glowing chest mid-river for a
+gift, the spread formation for bot play — and the marker contract says *when* to look for it.
+Written that way, "is it perceptible?" is answered at design time by the person who can still
+change the design, instead of at review time by someone who can only file a complaint.
+
 ---
 
 ## 1.6 The thesis: build an evidence pipeline, not a better prompt

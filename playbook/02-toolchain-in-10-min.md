@@ -59,6 +59,11 @@ bun run launch  # start Dota with -tools -addon <name>
 | `build:vscripts` | `tstl --project src/vscripts/tsconfig.json` | `src/vscripts/**/*.ts` | `game/scripts/vscripts/**/*.lua` |
 | `build:panorama` | `tsc --project src/panorama/tsconfig.json` | `src/panorama/**/*.ts` | `content/panorama/scripts/custom_game/**/*.js` |
 
+`run-p` is a laptop convenience only: on the Windows VM that runs the headless
+playtest it reports success having compiled nothing, so there you invoke
+`build:vscripts` and `build:panorama` separately and check each exit code (see
+[chapter 6](06-autonomous-vm-rig.md)).
+
 They are different compilers because they have different targets. Game logic
 becomes Lua for the server-side VM. UI becomes JavaScript for Panorama, Valve's
 browser-like UI runtime, which wants ES2017.
