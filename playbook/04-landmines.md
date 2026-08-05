@@ -1,6 +1,6 @@
 # 4. Landmines
 
-Twenty-five things that cost real days, with the symptom you will actually see,
+Thirty-three things that cost real days, with the symptom you will actually see,
 the cause, and the fix.
 
 They share a shape. Almost none of them produce an error at the place where the
@@ -867,9 +867,238 @@ large.
 
 ---
 
+## L26 — a Lua modifier cannot shadow a stock hero's modifier name
+
+**Symptom.** You re-kit Pudge, register `modifier_pudge_rot` with
+`LinkLuaModifier`, apply it, and nothing happens. `HasModifier("modifier_pudge_rot")`
+returns **true**. Not one of your Lua callbacks ever runs — no `OnCreated`, no
+interval think, no damage, no declared-modifier value. There is no error.
+
+**Cause.** `modifier_pudge_rot` is already registered by the engine as the stock
+ability's C++ modifier. `LinkLuaModifier` does not replace it and does not
+complain: every application path resolves to the inert built-in, and you get a
+modifier with that name — which is exactly the question `HasModifier` answers.
+
+Four different application mechanisms were tried on this and all four
+"succeeded". What finally proved it was a lifecycle probe — a print in
+`OnCreated` and `OnDestroy` that never fired once, showing the Lua class was
+never instantiated at all.
+
+**Fix.** Never reuse a stock kit's modifier names on a re-kitted hero. Pudge Wars
+puts a `_wars_` infix on every one of them (`modifier_pudge_wars_rot`), so no
+custom name can collide with a base-hero name.
+
+**The general rule.** This trap is *guaranteed* by the base-hero-override
+doctrine (L2). The moment your Assault archer **is** Windrunner, the engine
+already owns every modifier name in her stock kit, and the most natural name for
+your replacement is the one name you cannot have. Namespace the whole custom kit
+before you write it; renaming afterwards means touching KV, TypeScript and every
+`HasModifier` call site at once.
+
+*Observed live in pudge-wars 2026-07-27.*
+
+---
+
+## L27 — a particle is networked only to clients connected at creation
+
+**Symptom.** Persistent world visuals — shop pads, zone rings, boundary markers —
+render for nobody. Every server-side marker is green: the system logged that it
+built them, the particle indices came back valid, no error anywhere. The frames
+show clean ground.
+
+**Cause.** A particle is networked to the clients connected **at the instant it
+is created**. World FX created in `Activate` or in GameMode construction run
+while the server is still in `INIT`, roughly 15 seconds before the first client
+connects. The create goes out to an empty room, and nothing back-fills it when
+players arrive.
+
+**Fix.** Create persistent world visuals at `GAME_IN_PROGRESS`, not at
+construction, and print a draw marker at the creation site so the rig can prove
+the *timing* and not merely the intent.
+
+**The general rule.** "The system ran" and "a player saw it" are different
+claims, and this engine will let you collect a full set of green markers for the
+first while the second is false all match.
+
+*Observed live in pudge-wars 2026-08-03 (shop pads: every `[SHOP]` marker green,
+zero pad FX on any frame).*
+
+---
+
+## L28 — some vanilla particles cannot be driven from script at all
+
+**Symptom.** You point a tether at `pudge_meathook.vpcf`, precache it, set CP0
+and CP1 every tick, and see nothing. You switch to `rattletrap_hookshot.vpcf`
+and see nothing. No error in either direction.
+
+**Cause.** Those two assets need engine-internal state that no script API
+provides. Precaching is necessary and **not sufficient**: raw
+`SetParticleControl` and entity-anchored control points both fail, silently, on
+a correctly spelled and correctly precached path.
+
+**This corrects L23.** L23 covers only the precache half — meathook draws nothing
+when it is not precached — and implies that adding the precache line fixes it. It
+does not. Pudge Wars precached meathook and it still never rendered.
+
+**Fix.** Use a particle known to render as a plain CP0→CP1 beam. Panel-verified
+on screen: `wisp_tether.vpcf`, `razor_static_link_beam.vpcf`, and
+`batrider_flaming_lasso.vpcf` (which adds a droop arc). And never swap a tether
+particle blind: spawn every candidate at once in an on-screen FX candidate
+panel, read one frame, and keep the panel in the tree — the next swap then costs
+one run instead of one theory per run.
+
+*Observed live in pudge-wars 2026-07-29.*
+
+---
+
+## L29 — cheat-gated launch convars are accepted and ignored
+
+**Symptom.** You add `+dota_camera_distance` to the launch line for a recording
+run. The client starts. The convar reads back the value you set. The frames are
+pixel-identical to the un-zoomed run.
+
+**Cause.** The convar is cheat-gated. Setting it from the launch line stores the
+value without the engine ever honouring it, so every check available from
+outside the client says it worked.
+
+**Fix.** Zoom from the server instead:
+
+```ts
+GameRules.GetGameModeEntity().SetCameraDistanceOverride(1600);
+```
+
+For a follow-cam, `+dota_camera_lock` on the recording host's hero is the only
+route that works — the server-side `SetCameraTarget` leaves the tools client's
+camera parked where it already was.
+
+**The general rule.** A convar that reads back its own value has told you nothing
+about whether the engine applied it. For anything visual the readback is not the
+evidence; the frame is.
+
+*Observed live in pudge-wars 2026-07-29.*
+
+---
+
+## L30 — the order pipeline enforces geography, not physics
+
+Three truths, learned separately, all following from one fact: the order filter
+only ever sees **orders**.
+
+**(a) A filtered boundary is not a wall.** Pudge Wars' uncrossable river is
+walkable water tiles plus a `SetExecuteOrderFilter` that clamps every move target
+to the mover's own bank. Nobody can *order* a crossing. But a unit MOVED across
+the line by a motion controller — hook-dragged — walks straight home through the
+water on its next order, which the filter allows, because the destination is on
+its own side. Run 13: 198 completed drags, zero kills, every catch walked out.
+Any design that assumes a caught victim is trapped must trap it explicitly.
+
+**(b) `CAST_POSITION` bypasses the filter and walks the caster into range.** An
+out-of-range scripted cast is not rejected; the unit sets off toward the point
+until the ability becomes castable, which in a bot harness reads as a bot
+wandering away from the fight. Range-gate every scripted cast yourself before
+issuing it.
+
+**(c) Fake clients cannot reach a toggle ability through the pipeline.** A
+`CAST_TOGGLE` order is clobbered by any other order issued on the same think,
+and `ToggleAbility()` called on an `ability_lua` from server script is a silent
+no-op. Drive the modifier directly rather than ordering the toggle. (One more
+entry in the fake-client family — L4, L5, L6.)
+
+*Observed live in pudge-wars 2026-07-27/28.*
+
+---
+
+## L31 — the FFA→two-team seam reaches all the way into bot seating
+
+**Symptom.** You convert a 10-team FFA template to two teams. Nine bots seat,
+one hero stands on the map, the match scores zero kills. The bots are in the
+game — they just never got a hero.
+
+**Cause.** The seam is wider than it looks: team count lives in `addoninfo.txt`,
+the team list, the spawn logic, the net tables and the HUD. Past all of those,
+`dota_create_fake_clients` seats clients with **no team at all**. On an FFA game
+that goes unnoticed, because the seating code assigns a custom team anyway; on a
+two-team game the unassigned bots sit out hero selection entirely and
+`SetCustomGameForceHero` never touches them.
+
+**Fix.** An explicit balanced `SetCustomTeamAssignment` sweep over every seated
+fake client inside the setup window (L6), plus a `CreateHeroForPlayer` fallback
+for any bot still heroless at the horn.
+
+Cross-reference L7: the teams you assign here are the same teams that have no
+Hammer spawn points.
+
+*Observed live in pudge-wars 2026-07-26.*
+
+---
+
+## L32 — a motion-controller modifier is a four-callback contract
+
+**Symptom.** A hook drag works perfectly until the victim is displaced mid-drag —
+a respawn, a force staff, a second hook. Then the victim freezes in mid-air, or
+lands fine and can never be hooked again for the rest of the match.
+
+**Cause.** Declaring `LuaModifierMotionType.HORIZONTAL` is the declaration, not
+the contract. A unit has one horizontal motion controller, it has an owner, and
+it is only ever handed to the next claimant if the current owner gives it back.
+
+**Fix.** All four callbacks, every time:
+
+| Callback | Job |
+|---|---|
+| `ApplyHorizontalMotionController(parent)` | start — claim the controller when the modifier is created |
+| `UpdateHorizontalMotion` | move the unit, every tick |
+| `OnHorizontalMotionInterrupted` | something else took the controller — end your effect cleanly |
+| `OnDestroy` | release the controller, on every exit path |
+
+Skip the last two and you get exactly the two symptoms above: no interrupt
+handler leaves a victim frozen mid-flight, and no release leaves a dead
+controller blocking the next hook.
+
+The war story for the same ability is [chapter 11](11-failure-casebook.md), F8,
+which covers the declaration half; this is the lifecycle half.
+
+*Observed live in pudge-wars 2026-07-26 (the hook drag).*
+
+---
+
+## L33 — the minimap overview pipeline has three silent traps
+
+**Symptom.** A custom map renders a **white** minimap. You ship an overview
+material and it renders a solid grey one — while resourcecompiler reports
+"OK: compiled".
+
+**Cause.** Three separate traps, and exactly one of them produces a log line:
+
+1. The registration txt, `game/resource/overviews/<map>.txt`, needs the **full**
+   `materials/overviews/<map>.vmat` path, extension included. Extensionless logs
+   `FixupResourceName: Illegal path` — the one loud clue in the whole pipeline.
+2. The vmat's texture parameter is `Texture`, **not** `TextureColor`.
+   resourcecompiler binds any UNKNOWN parameter to
+   `materials/default/default_tga` — the solid grey — and still reports a
+   successful compile.
+3. The authoritative template is not online, it is on your disk: Valve's conquest
+   addon, `content/dota_addons/conquest/materials/overviews/`, which ships the
+   vmat plus a texture sidecar txt setting `clampu`/`clampv`/`nocompress`/
+   `nomip`. Copy it rather than inventing one. PNG input works; TGA is not
+   required.
+
+**Fix.** The three above, and then verify the compile instead of believing it:
+extract strings from the emitted `vmat_c` and confirm it references
+`<map>_png_<hash>.vtex` and not `default_tga`.
+
+**The general rule.** A compiler that treats an unknown parameter as a default
+binding rather than an error will report success on a material that draws
+nothing you wrote. This one cost three VM cycles; the string check on the
+`vmat_c` costs one command.
+
+*Observed live in pudge-wars 2026-08-02.*
+
+---
+
 ## The pattern
 
-Twenty-two of these twenty-five fail silently or report the wrong thing. That is the
+Thirty of these thirty-three fail silently or report the wrong thing. That is the
 single most important fact about this engine, and it has a direct consequence
 for how you work:
 
