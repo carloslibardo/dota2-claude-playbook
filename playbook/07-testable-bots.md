@@ -7,7 +7,7 @@ the game testable at all. Every recorded verification run in this project is a b
 
 That inverts the usual priority. If the bots are the test rig, the bots have to be more
 trustworthy than the game, and they have to be debuggable without booting the game. This
-chapter is how we got there, and the five pathologies we hit on the way.
+chapter is how we got there, and the six pathologies we hit on the way.
 
 The short version: **the decision logic must be pure enough to run on a laptop in
 milliseconds, and the tick loop must issue commitments rather than recomputations.** Almost
@@ -472,6 +472,78 @@ theory with an arithmetic.
 
 ---
 
+## 7.9 A gate is only as wide as the markers underneath it
+
+The sixth pathology is the fifth one's sequel: same feature, same rig, three runs later. The
+dodge reflex from §7.8 was working. The run failed anyway, on this line:
+
+```
+SMOKE FAIL: no [DODGE] -- the reflex layer is dead code (spec 009)
+```
+
+The reflex layer was not dead code. It had fired four times in that match. It had simply
+chosen the *other* dodge action all four times, and that action printed nothing.
+
+Three distinct mistakes stacked into one red, and they generalize in three different
+directions.
+
+**One marker for a two-branch behaviour.** The dodge reflex could sidestep or it could
+Vanish. Only the sidestep printed `[DODGE]`; Vanish printed a generic `[SKILL] used` line
+that the dodge gate did not read. So a gate whose subject was "does the reflex layer fire"
+was in practice asking "does the reflex layer fire *and pick branch A*." The moment the
+branch balance shifted, a healthy system reported as a dead one.
+
+> **Every branch of a gated behaviour prints.** A gate cannot see behaviour, only markers, so
+> its true subject is the union of the markers under it — not the feature you had in mind
+> when you wrote it. Add a branch to a gated behaviour and you have silently narrowed every
+> gate that covers it.
+
+This is the inverse of the failure the rest of this book is about. The usual engine failure
+is a green that means nothing. This is a **red that means nothing** — and it is more
+expensive per occurrence, because a false red sends you to debug working code, with the
+failure message itself pointing at the wrong subsystem.
+
+**The alternation that never alternated.** The two branches were supposed to split roughly
+evenly, on this condition:
+
+```ts
+vanish.IsFullyCastable() && (!hook || !hook.IsFullyCastable() || this.tick % 2 === 0)
+```
+
+Read it as written: Vanish is taken when it is castable *and* (own hook is down **or** the
+tick is even). That match fired 129 hooks. The own-hook-down clause was true nearly always,
+short-circuited the `||`, and the tick parity was never consulted. Four dodges, four
+Vanishes, zero sidesteps. The parity term was decorative — it looked like the mechanism and
+was dead weight in the expression.
+
+**Tick parity is not a coin flip.** Even with the short-circuit fixed, parity was the wrong
+instrument, and this is the part worth carrying to other projects. A whole 25-kill match
+surfaces four to six dodge events, and they are not spread evenly through the match — they
+cluster inside the few ticks of a hook volley. A "50/50" split sampled four times, on a clock
+that correlates with the event itself, can hand every event to one phase. Which is what
+happened.
+
+> **When both branches must be exercised in a run, alternate on a counter, not a
+> probability.** A match-global counter, incremented per event, guarantees both branches given
+> two events. A probability guarantees a distribution, and a distribution is a statement about
+> many samples — which is exactly what a rare event does not give you.
+
+The rule generalizes past bots: any time a test run must *observe* both outcomes of a choice,
+the choice needs to be scheduled, not sampled. Save randomness for behaviour whose realism
+matters and whose sample count is large.
+
+**The failure message asserted a cause.** `no [DODGE] -- the reflex layer is dead code` was
+half observation and half diagnosis, and the diagnosis was wrong. The observation — no
+`[DODGE]` lines — was correct and would have led straight to the marker gap. The
+editorializing sent the reader to the reflex layer instead.
+
+> **A gate reports an absence, not a cause.** `no [DODGE] markers in a 25-kill match` is
+> checkable and always true when it prints. `the reflex layer is dead code` is an inference
+> the gate is not in a position to make, and it will eventually be wrong in the most expensive
+> way: confidently, in the one line a human reads.
+
+---
+
 ## Checklist
 
 - [ ] Perception and executor are the only layers that touch engine globals.
@@ -490,6 +562,11 @@ theory with an arithmetic.
 - [ ] Every behaviour fix is re-judged against the full gate set, not just its own gate.
 - [ ] Any gate on a mechanism healthy behaviour cannot reach has a probe, and the probe
       survives being killed.
+- [ ] Every branch of a gated behaviour prints a marker the gate actually reads — adding a
+      branch silently narrows every gate above it.
+- [ ] Where a run must observe both outcomes of a choice, the choice alternates on a counter;
+      probabilities are for behaviour with many samples, not for rare clustered events.
+- [ ] Every gate failure message states the absence observed, never the cause inferred.
 - [ ] Every constant that came from an incident has a dated comment saying which one.
 
 **Related:** [chapter 5, testing without the engine](05-testing-without-engine.md) ·
