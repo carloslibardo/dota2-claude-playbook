@@ -1,6 +1,6 @@
 ---
 name: workshop-publish
-description: Use when publishing or updating the game on the Steam Workshop — the cook-then-upload path, the steamcmd recipe that creates the item headlessly, and the three things that genuinely still need a human
+description: Use when publishing or updating the game on the Steam Workshop — the cook-then-upload path, the steamcmd recipe that creates the item headlessly, and the four things that genuinely still need a human (including the one GUI pass that tags the item into the Arcade)
 ---
 
 # Workshop publish
@@ -40,7 +40,7 @@ A `.vdf` with `publishedfileid` `0` handed to `steamcmd +workshop_build_item`
     "publishedfileid" "0"          // 0 = create. Replace with the returned ID
                                    // so every later run UPDATES that item
     "contentfolder"   "<abs path to cooked content>"
-    "previewfile"     "<abs path to preview image>"
+    "previewfile"     "<abs path to preview image>"   // CREATE only
     "visibility"      "2"          // 0 public · 1 friends · 2 hidden · 3 unlisted
     "title"           "<title>"
     "changenote"      "<note>"
@@ -48,14 +48,22 @@ A `.vdf` with `publishedfileid` `0` handed to `steamcmd +workshop_build_item`
 ```
 
 ```powershell
-steamcmd +login <account> +workshop_build_item C:\path\to\<addon>.vdf +quit
+C:\steamcmd\steamcmd.exe +login <account> +workshop_build_item C:\path\to\<addon>.vdf +quit
 ```
 
-**Record the returned ID** in the `.vdf` and wherever your scripts read config.
-A second run with `0` creates a *second* item.
-
-Start at `visibility 2` (hidden). Flip to public only after the release gate
-below has passed on the version you actually uploaded.
+- **Always call `steamcmd` by its FULL PATH.** It is not on `PATH`. A bare
+  `steamcmd` silently no-ops **and the wrapper still reports `PUBLISH OK`** —
+  a false success on the one step whose result is public. Verify a publish by
+  the item's `timeupdated` on the Workshop page, never by the script's own
+  "OK".
+- **Record the returned ID** in the `.vdf` and wherever your scripts read
+  config. A second run with `0` creates a *second* item.
+- **`previewfile` and `visibility` are honoured on create — and on update.**
+  Leaving them in the update `.vdf` reverts whatever you changed on the item
+  page since (including flipping a public item back to hidden). Once the item
+  exists, omit both keys from the update path.
+- Start at `visibility 2` (hidden). Flip to public only after the release gate
+  below has passed on the version you actually uploaded.
 
 ## What is still manual
 
@@ -64,7 +72,15 @@ below has passed on the version you actually uploaded.
   non-interactively over SSH.
 - The **Workshop Legal Agreement**, accepted on steamcommunity.com by the owning
   account. An upload from an account that never accepted it does not take.
-- The **store presentation** — preview image, description, tags.
+- **One GUI republish to set the item's TAGS.** An item created headlessly has
+  an empty tag set, and an untagged custom game is **invisible in the Arcade
+  browse and search** — public, playable by direct link, findable by nobody.
+  `steamcmd` has no tag argument; the Workshop web edit page and the
+  published-file API will not set the Dota game tags either. One publish from
+  the Workshop Tools publisher GUI does, and later `steamcmd` updates preserve
+  the tags. **The automation ceiling is exactly one GUI pass per item, not
+  zero** — budget it, and do not report a headless create as "published".
+- The **store presentation** — preview image, description.
 
 ## Release gate before you flip it public
 
@@ -74,6 +90,8 @@ below has passed on the version you actually uploaded.
       item produces an observable effect (`/vm-testrig`, `/evidence-gate`)
 - [ ] Frames reviewed for anything visual that changed
 - [ ] `publishedfileid` in the `.vdf` is the real item, not `0`
+- [ ] `steamcmd` invoked by full path, and the item's `timeupdated` actually moved
+- [ ] Tags set (once, via the GUI publisher) — or the game is unfindable in the Arcade
 - [ ] The uploaded build is the commit you think it is — tag it
 
 `.github/workflows/release.yml` in this template is the skeleton, disabled by

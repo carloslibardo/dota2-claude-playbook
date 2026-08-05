@@ -23,6 +23,11 @@ hero. The full story is the playbook's chapter 4 (L2, L3) and casebook F3/F4.
   it times out hero selection and assigns something at random.
 - One base hero can back exactly one custom hero. Two custom heroes on the same
   base is the collision that has no symptom until both are in the same match.
+- **Re-kitting reserves the stock kit's MODIFIER NAMES too.** Overriding Pudge
+  in place does not free `modifier_pudge_rot` — that name still resolves to the
+  engine's inert C++ built-in, so your Lua class never runs while `HasModifier`
+  cheerfully returns true (landmine L26). Never reuse a stock modifier name of
+  the hero you are overriding; add an infix (`modifier_arena_pudge_rot`).
 
 ## The five places a hero exists
 
