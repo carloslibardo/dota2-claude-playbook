@@ -42,6 +42,11 @@ export function e2eKillTarget(fallback: number): number {
 }
 
 export class E2EHarness {
+    // BEFORE BOTS CAN CAST, SPEND THEIR ABILITY POINTS. Ability points do not
+    // spend themselves: a level-0 ability makes IsFullyCastable() false forever,
+    // so a harness that only orders casts logs a clean run with zero casts and
+    // no error. Add a leveling loop (level lowest-first) plus an XP boost at the
+    // horn, and re-check the spread every time a skill joins the kit.
     private seated = false;
     private started = false;
 

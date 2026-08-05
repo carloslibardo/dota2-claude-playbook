@@ -118,6 +118,20 @@ place.
 - **Seat e2e bots at `CUSTOM_GAME_SETUP`**, before hero selection closes.
   Seated later, `CreateHeroForPlayer` rejects them ("bogus player id") and they
   spend the match heroless.
+- **Fake clients join TEAMLESS.** `dota_create_fake_clients` seats players with
+  no team assignment. FFA hides this (everyone gets their own `CUSTOM_*` team
+  anyway), but on ANY non-FFA layout teamless bots never pass hero selection and
+  sit the match out — no error. Run an explicit `SetCustomTeamAssignment` sweep
+  over every seated bot during `CUSTOM_GAME_SETUP`. And note the seam is deeper
+  than it looks: converting this template from FFA to two teams also touches
+  `addoninfo.txt` (`TeamCount`), the team list, spawn logic, the net tables and
+  the HUD — it is not a KV toggle.
+- **A particle is networked only to clients connected at the instant it is
+  created.** World FX spawned at `Activate` / GameMode construction run while
+  the server sits in INIT, ~15 s before the first client connects — they render
+  for NOBODY, silently, while every server-side log marker stays green. Create
+  persistent world visuals at `GAME_IN_PROGRESS` and print a draw marker so the
+  rig can prove the timing.
 - **Custom FFA teams have no Hammer spawn points.** Heroes on the eight
   `DotaTeam.CUSTOM_*` teams all spawn at the world origin. `systems/spawnPositions.ts`
   repositions them onto a ring; do not remove it.

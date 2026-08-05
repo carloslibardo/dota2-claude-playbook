@@ -32,6 +32,16 @@ Seating bots is where this bites (L4, L5, L6):
   `CreateHeroForPlayer` rejects them ("bogus player id") — they spend the match
   heroless.
 - Resolve their heroes with `heroForPlayer()`, never `GetSelectedHeroEntity`.
+- **Fake clients join TEAMLESS.** A 10-teams-of-one FFA auto-assigns them and
+  hides this; anything with two teams leaves them unassigned, so hero selection
+  never touches them and they sit out the whole match. Sweep
+  `SetCustomTeamAssignment` explicitly in the setup window, and keep a
+  `CreateHeroForPlayer` fallback at engage.
+- **Fake clients cannot work a toggle ability through the order pipeline.** A
+  `CAST_TOGGLE` order is clobbered by the same think's `Queue:false` move/cast
+  order, and `ToggleAbility()` is a silent no-op on an `ability_lua` toggle from
+  server script. Drive the modifier directly — call the same `apply()` that
+  `OnToggle` calls. The toggle *switch* stays a human-playtest item.
 
 Print the markers your contract promised (`/evidence-gate`), with timestamps.
 
@@ -69,6 +79,10 @@ VM**.
   The expensive mistake is not one run; it is a VM left on over a weekend.
 - **Retrieve evidence before shutting down, especially on failure** — that run
   is the only record of why.
+- **Census pulled `console.log`s with `grep -a`.** Dota's log carries stray
+  control bytes; macOS BSD grep calls it binary and returns zero matches with
+  exit 1 and no warning, so a green run reads as all-zeros. Never write a
+  bare `grep` against a pulled log.
 
 ## Modes are one convar plus one contract
 

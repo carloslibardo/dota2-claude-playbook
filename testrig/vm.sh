@@ -32,6 +32,11 @@
 #   scp back result + video + console.log -> print a summary -> STOP THE VM.
 #
 # That last step is not politeness, it is money. See README.md.
+#
+# Every gcloud call here can fail with "Reauthentication failed. cannot prompt
+# during non-interactive execution" when the credentials expire mid-cycle.
+# There is nothing to retry: `gcloud auth login` is interactive-only. Report
+# that string verbatim and hand the login back to a human.
 set -euo pipefail
 
 PROJECT="${PROJECT:?set PROJECT to your GCP project id}"
@@ -57,6 +62,19 @@ vm_ssh() { ssh "${SSH_OPTS[@]}" builder@localhost "$@"; }
 vm_scp() {
   # $1 = remote path, $2 = local dir. Missing files are not an error: a failed
   # run should still hand back whatever evidence it did manage to produce.
+  #
+  # TWO transport landmines live here, both silent:
+  #  1. The IAP tunnel kills any single scp stream at ~59 MB
+  #     (ConnectionReconnectTimeout), and retrying the whole file dies at the
+  #     same offset. Anything bigger — a full match recording runs ~190 MB —
+  #     must be split VM-side into <=40 MB parts (from a STAGED .ps1 file;
+  #     inline PowerShell over ssh mangles $ vars), pulled part by part with
+  #     per-part size verification, and reassembled locally.
+  #  2. scp can TRUNCATE behind a masked exit code: a 61 MB mp4 arrived as
+  #     16 MB with exit 0. Size-verify every pull — compare local bytes to
+  #     remote, accepting local >= remote (the remote size is sampled while
+  #     the writer may still be flushing). "The command returned zero" is not
+  #     evidence the artifact arrived, same as it is not evidence the run passed.
   scp -P 2222 -i "$VM_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     "builder@localhost:$1" "$2" 2>/dev/null || echo "  (not retrieved: $1)"
 }
@@ -86,6 +104,8 @@ case "${1:-}" in
 
   tunnel)
     # IAP tunnel instead of a public IP: nothing listens on the open internet.
+    # If this exits immediately, the VM is probably still booting — gcloud's
+    # preflight fails before sshd is up. Retry tunnel+ssh together (see `run`).
     exec gcloud compute start-iap-tunnel "$INSTANCE" 22 \
       --local-host-port=localhost:2222 --project="$PROJECT" --zone="$ZONE"
     ;;
@@ -95,10 +115,20 @@ case "${1:-}" in
   run)
     STATUS="$(gcloud compute instances describe "$INSTANCE" --project="$PROJECT" --zone="$ZONE" --format='get(status)')"
     if [ "$STATUS" != "RUNNING" ]; then
+      # GPU capacity is NOT guaranteed: a T4 start can fail outright with
+      # ZONE_RESOURCE_POOL_EXHAUSTED. Routine, not exotic. Wrap this in a retry
+      # loop, or fall back to a sibling zone (us-central1-b / -f), before it
+      # eats a run.
       echo "starting $INSTANCE..."
       gcloud compute instances start "$INSTANCE" --project="$PROJECT" --zone="$ZONE"
     fi
 
+    # The tunnel and the ssh probe below are ONE unit and must be retried as
+    # one. start-iap-tunnel runs its own preflight; against a Windows VM that
+    # has booted but not yet started sshd, that preflight dies and the tunnel
+    # process exits — after which retrying only the ssh loop can never succeed.
+    # A LEFTOVER tunnel from an earlier session keeps localhost:2222 answering
+    # and masks this until the next clean run, so kill stale tunnels first.
     gcloud compute start-iap-tunnel "$INSTANCE" 22 \
       --local-host-port=localhost:2222 --project="$PROJECT" --zone="$ZONE" &
     TUNNEL_PID=$!

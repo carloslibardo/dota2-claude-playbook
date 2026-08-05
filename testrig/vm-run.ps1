@@ -68,6 +68,10 @@ $dotaArgs = @(
   "-windowed", "-w", "1280", "-h", "720",
   "+$Convar", "1",
   "+${Convar}_kills", "$Kills",
+  # +dota_launch_custom_game consumes the NEXT TWO tokens: addon, then map.
+  # Treat the triple as atomic — splice a convar inside it and the convar's
+  # name becomes the addon name, the client loads nothing, and it says so
+  # nowhere. Every "+name value" pair goes BEFORE this line.
   "+dota_launch_custom_game", $Addon, $Map
 )
 "--- LAUNCH ---" | Add-Content $result

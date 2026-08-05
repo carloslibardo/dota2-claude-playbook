@@ -33,7 +33,12 @@ empty terrain. Extract frames with ffmpeg, open them, look at them. Then write f
 into your acceptance criteria as a written requirement, so it survives the next agent and the
 next week.
 
-> Expanded in: [chapter 1](01-why-this-is-hard.md) and [chapter 11, F11](11-failure-casebook.md#f11).
+And once every feature renders, ask the frame strip the bigger question — **"is this the
+game?"** — because markers measure mechanics, not shape: Pudge Wars passed every gate on a run
+whose video showed a melee brawl in a stock jungle with no river in it (2026-07-27).
+
+> Expanded in: [chapter 1](01-why-this-is-hard.md), [chapter 5, tier 4](05-testing-without-engine.md)
+> and [chapter 11, F11](11-failure-casebook.md#f11).
 
 ### 3. When a deliverable is rejected twice for the same reason, fix the evidence pipeline, not the deliverable
 

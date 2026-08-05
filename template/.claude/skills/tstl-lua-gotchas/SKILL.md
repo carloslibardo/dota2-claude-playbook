@@ -44,6 +44,43 @@ Most of TS maps over cleanly. These are the seams.
 - **Multi-returns:** engine functions documented as returning multiple values
   arrive as tuples via declarations; destructure them, don't index.
 
+## Stdlib TSTL does not emit
+
+TSTL polyfills *most* of `Math`/`Number`, not all of it. This family is the
+rare LOUD one — mostly a build error rather than silence — but the workarounds
+are non-obvious, so write them right the first time.
+
+- **`Math.hypot` is unsupported** — the build fails outright with
+  `TSTL: Math.hypot is unsupported`. Spell the length out:
+  `Math.sqrt(dx * dx + dy * dy)`. (Skillshot geometry hits this within an hour.)
+- **`Math.imul` is unsupported too, and this one can bite quietly.** A naive
+  `a * b` compiles fine and silently loses bits past 2^53 — which wrecks any
+  ported 32-bit hash or PRNG (mulberry32 and friends). Use a 16-bit split
+  multiply:
+  ```ts
+  export function imul32(a: number, b: number): number {
+      const aHi = (a >>> 16) & 0xffff;
+      const aLo = a & 0xffff;
+      const bHi = (b >>> 16) & 0xffff;
+      const bLo = b & 0xffff;
+      return (aLo * bLo + (((aHi * bLo + aLo * bHi) << 16) >>> 0)) | 0;
+  }
+  ```
+  Keep it in `lib/` with a vitest that pins known vectors.
+- **`Infinity` / `Number.POSITIVE_INFINITY` sentinels are risky** across the
+  boundary (arithmetic, comparisons, and anything that crosses to the client).
+  Track "best so far" with an `undefined` guard instead:
+  `if (best === undefined || d < bestDistance) { ... }`.
+- **Not every engine method is in the typings.** `GetIntervalThinkTime()`
+  exists in-engine but is absent from `@moddota/dota-lua-types`, so `tsc`
+  rejects it. Default move: don't cast around the typings — you already passed
+  the interval to `StartIntervalThink`, so keep it in a field and reuse that.
+  Reconcile with the `engineExtras.d.ts` escape hatch (chapter 2) by which case
+  you are in: **declare it in `engineExtras.d.ts` with a nil-guard at every call
+  site** when you genuinely must *call* an undeclared global/method; **store
+  your own copy** when the value is one you already had and the call is just a
+  read-back.
+
 ## Engine-handle hygiene
 
 - Entity handles outlive their entities. Before EVERY use of a stored handle:

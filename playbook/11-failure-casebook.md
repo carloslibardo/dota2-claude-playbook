@@ -1,6 +1,6 @@
 # 11. The Failure Casebook
 
-Seventeen failures, told properly.
+Twenty failures, told properly.
 
 [Chapter 4](04-landmines.md) is the terse version — the landmine list, each entry a symptom, a
 cause and a mechanical fix, written to be scanned in five minutes when something is broken.
@@ -13,6 +13,13 @@ F8 makes F11 inevitable, and F12 is what happens when you fix deliverables inste
 pipelines three times in a row.
 
 Where a failure has a mechanical counterpart in the landmine list, we say so.
+
+One note on provenance. F1 through F17 were bought building Archer Wars, the ten-player
+free-for-all this playbook was extracted from. F18 through F20 come from Pudge Wars — a second
+game, built on the same rig a month later, by an agent following this playbook as written. That
+is the more uncomfortable set, because those three were paid for by a project that had already
+read every word of this chapter, and they still cost five red runs, a rejected video and an
+afternoon of re-deriving what "passing" meant.
 
 ---
 
@@ -309,6 +316,9 @@ test that cannot fail on a broken feature is not a test.**
 The larger consequence: this failure, more than any other, is why the publish quality gate
 exists. Two rounds of shipping the same broken ability is the point at which you stop fixing
 the ability and start fixing the thing that keeps saying it's fine.
+
+> Mechanical fix: [chapter 4, L32](04-landmines.md) — the four-callback motion-controller
+> contract, written up only after a second game hit the same wall building a hook-drag.
 
 ---
 
@@ -677,13 +687,181 @@ that one specific thing quietly does nothing.
 
 ---
 
+<a id="f18"></a>
+## F18 — The modifier that was never there
+
+**Story.** F18, F19 and F20 are the second game's failures. Pudge Wars re-kits stock Pudge in
+place — exactly the pattern F3 forced on Archer Wars and this playbook now recommends. The
+custom Rot ability applied a modifier named, reasonably enough, `modifier_pudge_rot`.
+
+Five consecutive smoke runs went red on the same line. The gate hard-fails unless `[ROT] tick`
+appears alongside the win marker, and it never appeared. Not once, across five runs and four
+completely different application mechanisms:
+
+- a `CAST_TOGGLE` order through the order pipeline,
+- `ToggleAbility()` from server script,
+- `AddNewModifier` by name,
+- the modifier class's own `apply()`, called directly.
+
+All four succeeded. None of them errored, none of them returned nil, and
+`HasModifier("modifier_pudge_rot")` returned **true** throughout. The modifier was present. The
+modifier was, by every observable the code could reach, working. And not one Lua callback ever
+ran — no `OnCreated`, no `OnIntervalThink`, no `OnDestroy`.
+
+Lifecycle probes on the constructor and destructor finally produced the fact that no amount of
+reading could:
+
+> every application path resolves the name to the inert C++ modifier — `HasModifier()` returns
+> true, and not one Lua callback ever runs. No error, ever.
+
+`modifier_pudge_rot` and `modifier_pudge_flesh_heap` are the names of Dota's **own**
+engine-registered C++ modifiers for vanilla Pudge. `LinkLuaModifier` cannot shadow a built-in.
+The engine had been handing out its inert stock modifier the whole time; the Lua class was never
+instantiated even once.
+
+Flesh Heap was crueler, because it half-worked. `GameMode`'s `SetStackCount` call landed on the
+vanilla modifier, so stacks incremented visibly on screen — a number going up in the HUD, a
+plausible-looking feature — while the custom HP-per-stack logic behind it was dead code. A
+feature that works on camera and not in the model is worse than one that plainly does nothing,
+because it recruits the frame reviewer as a witness for the defence.
+
+The fix is a `_wars_` infix on every modifier whose name collides with a stock hero's kit.
+
+**Rule.** **Custom modifiers — and by extension abilities — for a re-kitted stock hero must
+never reuse the stock kit's names.** The engine's namespace is not yours, it is not versioned,
+and it will not tell you when you land on top of it.
+
+And the epistemic half, which is why this is a story and not a landmine: **only a marker-gated
+live run can find this**, because every single code path reports success. There is no static
+check, no type error, no warning, and no runtime signal — the one observable that would have
+lied least, `HasModifier`, lies loudest. Note also who built the trap: this playbook's own hero
+doctrine (F3 — override base heroes in place) puts you *inside* the collision namespace by
+construction. The recommended architecture is the precondition for the bug.
+
+> Mechanical fix: [chapter 4, L26](04-landmines.md) — naming rules for re-kitted stock heroes;
+> the four "successful" application paths are [L30](04-landmines.md), which also explains why a
+> fake client cannot reach a toggle through the order pipeline at all.
+
+---
+
+<a id="f19"></a>
+## F19 — The balance change that invalidated the test rig
+
+**Story.** Pudge Wars made a landed hook a guaranteed kill: latch, drag the victim home across
+the river, execute. One spec, one afternoon, a deliberate design decision about what the game
+is.
+
+The next smoke run went red in three unrelated places, and every one of them looked like a
+broken feature.
+
+The retreat gate fired zero times. So did the iron-gut gate. Both are conditioned on a bot
+dropping below 35% HP — and in a meta where the only meaningful damage source removes one
+hundred percent of it, damage is bimodal. Bots are at full HP or they are dead. There is no
+below-35% state left in the game for a gate to observe.
+
+The river-hazard probe died 1 second into its 7-second window. That probe exists because healthy
+play never enters the water (the order filter keeps bots out by construction), so the harness
+teleports one bot in to prove the burn on camera. A bot standing still in the middle of the
+river, in a meta with 2400-speed guaranteed-kill hooks, is not a test fixture. It is a free kill.
+The burn gate could never accumulate enough ticks to pass.
+
+And the meteor's trigger concept — *fire when an intruder sets foot on my bank* — had gone
+quietly extinct. Intruders now die on arrival. The condition was still correct; it just no
+longer described any event the game produces.
+
+Three red gates, three hours of hunting for regressions in features that had not changed. Every
+one was a broken **precondition**, not a broken feature.
+
+The fixes are three different shapes and all three are worth stealing:
+
+- **Opportunity telemetry.** Count the moments a gate's precondition *could* have been met, and
+  gate conditionally on that. Zero retreats out of zero opportunities is green. Zero retreats out
+  of forty is red. A raw event count cannot tell those apart, and it is the difference between a
+  bug and a meta.
+- **Probes that retry on death.** A probe is test apparatus, not a participant. If the meta kills
+  it, respawn it and keep the window open — otherwise the harness's own survivability becomes an
+  undeclared dependency of your gate.
+- **Triggers re-homed to the new meta.** The meteor became cross-river poke, because
+  "intruder on my bank" had stopped being a thing that happens.
+
+**Rule.** **Test gates have preconditions, and a balance change is a precondition change.**
+After any meta-level change, re-derive every gate's reachable-state assumption before trusting a
+red — and, more dangerous, before trusting a green. A gate whose precondition has become
+unreachable does not go red; it goes *quiet*, and a quiet gate reads exactly like a passing one.
+
+The nearest kin in this chapter is F13: a change described as cosmetic that touches world
+geometry is not cosmetic. This is the same sentence one level up. A change described as
+*balance* that touches the reachable state space is not balance — it is a rewrite of the domain
+every assertion in your rig quantifies over.
+
+---
+
+<a id="f20"></a>
+## F20 — The pads that rendered for nobody
+
+**Story.** Pudge Wars sells items from two glowing shop pads, one per bank. Five glow particles
+between them, created in the `GameMode` constructor — the earliest deterministic place in the
+addon, chosen for exactly that reason.
+
+Every `[SHOP]` marker was green. Purchases fired, gold was debited, the inventory audit passed
+9/9, across two full recorded runs.
+
+Then a human watched the video and asked:
+
+> where is the shop?
+
+Zero pad FX. Not dim, not misplaced, not the wrong colour — no shop particle on any frame of
+either recording, ever.
+
+A particle in this engine is networked only to the clients connected **at the instant of
+creation**. The `GameMode` constructor runs while the server is still in `INIT`, roughly fifteen
+seconds before the first client finishes connecting. All five particles were created. All five
+succeeded. They were broadcast to an audience of nobody, and no client that joins afterwards is
+ever told they exist.
+
+The fix moved the draw to `GAME_IN_PROGRESS` and — the part that matters more — added a draw
+marker, `[SHOP] pads drawn 2`, logged at the moment of creation. The rig can now prove the
+timing on every run forever after, instead of proving it once by video and forgetting.
+
+**Rule.** **For world FX, *when* you create is as load-bearing as *what* you create.** A
+server-side success log tells you the call ran. It tells you nothing about who was on the other
+end to receive the render, and creation-time audience is part of the contract in every
+create-once-and-broadcast system — particles, overlays, sounds, anything whose delivery list is
+snapshotted rather than subscribed. It never appears in the signature. It never appears in the
+return value.
+
+The corollary is the cheap one and it applies well beyond particles: when the bug is *timing*,
+the fix is not complete until a marker records the timing. Moving the call fixed this run;
+`[SHOP] pads drawn 2` is what stops the next refactor from moving it back.
+
+> Mechanical fix: [chapter 4, L27](04-landmines.md).
+
+---
+
+<a id="sidebar2"></a>
+## The second sidebar: four more from the second game
+
+Same shape as F14, different codebase. Each of these cost a run or a rejected deliverable.
+
+| Symptom | Cause | Rule |
+|---|---|---|
+| level-0 abilities: bot e2e fires zero casts | ability points don't spend themselves; `IsFullyCastable()` is false at level 0 | every bot harness needs a leveling loop + an XP boost at the horn |
+| bare `steamcmd` publishes nothing, wrapper prints `PUBLISH OK` | steamcmd is not on PATH; the shell swallows it | invoke the full exe path; verify the publish from **outside** the script |
+| pulled `console.log` greps as zero matches on a green run | BSD grep flags stray control bytes as binary and reports nothing | `grep -a` every pulled Dota log |
+| `+dota_camera_distance` in the launch line changes nothing | cheat-gated convar, silently ignored | `SetCameraDistanceOverride` server-side; camera facts belong to [L29](04-landmines.md) |
+
+---
+
 ## Reading the casebook as a whole
 
-Sorted by underlying cause rather than by symptom, the seventeen collapse into six families:
+Sorted by underlying cause rather than by symptom, the twenty collapse into seven families:
 
-**Silent no-ops (F1, F6, F10, F11, and half of F14).** The engine accepted the call and did
-nothing. This is the dominant hazard class in game work and the reason
-[chapter 4](04-landmines.md) exists.
+**Silent no-ops (F1, F6, F10, F11, F18, F20, and half of both sidebars).** The engine accepted
+the call and did nothing. This is the dominant hazard class in game work and the reason
+[chapter 4](04-landmines.md) exists. F18 and F20 are the purest specimens in the book: one
+where the engine answered *yes, the modifier is there* about a class it had never instantiated,
+and one where five particles were created successfully for an audience that had not connected
+yet.
 
 **Assertions that couldn't fail (F2, F8).** The test measured the call, not the effect. Both
 shipped broken features past a green harness.
@@ -694,16 +872,31 @@ symptoms, one fix shape.
 **Platform gaps (F9).** The rig and the player were not running the same Lua.
 
 **Evidence pipeline (F11, F12, F13).** The proof machinery was aimed at the wrong thing, and no
-amount of re-running it would have said so.
+amount of re-running it would have said so. F20 is a silent no-op by cause but it was caught
+here, the same way F11 was: two green runs, one human watching the video.
 
 **Two copies that must agree (F15, F16, F17).** A wire value and the Lua that reads it; the
 engine's model of a purchase and the handler's model of it; a KV file and the TypeScript table
 that mirrors it. Nothing errors, because each copy is internally consistent.
 
-If you are starting a project of this kind, the honest prediction is that you will meet all six
-families in your first two weeks. The point of writing them down is not that you will avoid
-them — it is that you will recognize them on day two instead of day eight, and that when the
-third rejected deliverable arrives you will know to stop and go build the pipeline.
+**A correct system invalidated by a change elsewhere in the design (F19, and two design-side
+cousins).** Nothing here is broken in the ordinary sense — every component still does exactly
+what it was written to do, and the thing that changed was somewhere else entirely. F19 is the
+verification-side case: guaranteed-kill hooks made the states three gates watched for
+unreachable, so the gates went quiet rather than red. The first cousin is **perceptibility** — a
+chest spawner that worked perfectly and shipped an invisible feature, because hunters took the
+chest inside a second and the spec never said a feature has to exist at the speed a viewer can
+see it. The second is **incentives versus enforcement** — a river that one spec forbade you to
+linger in and another paid +30 HP/s to sit in, two correct specs whose product was a mechanic at
+war with itself. Reach for this family whenever a red gate, a dead feature or a nonsense
+behaviour resists debugging: ask what else changed, and whether this system's assumptions
+survived it.
+
+If you are starting a project of this kind, the honest prediction is that you will meet the
+first six families in your first two weeks, and the seventh the first time you change the design
+after the tests were written. The point of writing them down is not that you will avoid them —
+it is that you will recognize them on day two instead of day eight, and that when the third
+rejected deliverable arrives you will know to stop and go build the pipeline.
 
 One last thing about the sixth family, since it arrived last and by a different route. F1
 through F14 were found by playing the game. F15 through F17 were found by three agents reading

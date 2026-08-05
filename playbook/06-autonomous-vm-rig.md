@@ -63,7 +63,7 @@ run: you do the manual half exactly once, on a disk that survives.
 `--maintenance-policy=TERMINATE` is required for GPU instances: GCP cannot live
 migrate a machine with an attached accelerator.
 
-## The four things that are not obvious
+## The six things that are not obvious
 
 ### 1. SSH cannot launch the game
 
@@ -103,6 +103,14 @@ art. Both compilers run on the VM after every sync:
 tstl --project src/vscripts/tsconfig.json
 tsc  --project src/panorama/tsconfig.json
 ```
+
+Two separate invocations, deliberately: `run-p` (npm-run-all), which your
+`bun run build` uses on a laptop, does not work on this Windows VM. It resolves
+its child scripts through a shell that is not the one PowerShell hands it, and
+you get a build that reports success having compiled nothing — the same silent
+class as the stale-artifacts bug it is supposed to prevent. On the VM, call the
+two scripts one at a time (`bun run build:vscripts`, then
+`bun run build:panorama`) and check each exit code.
 
 Forgetting the second is the common version, because Lua feels like "the code"
 and Panorama feels like assets. It is landmine L10.
@@ -145,6 +153,55 @@ the thing you cared about actually happened. A run with zero errors and no
 Write the contract before the feature. When a spec's `contracts/` directory
 names the strings up front, the implementation and the verifier are agreeing on
 paper instead of by luck.
+
+### 5. Getting onto the box is its own failure surface
+
+Three things about `gcloud` that will each cost you a run before you learn them.
+
+**The tunnel and the SSH probe are one unit, and must be retried as one.**
+`gcloud compute start-iap-tunnel` runs its own preflight against the instance,
+and against a Windows VM that has booted but not yet started `sshd` that
+preflight dies — so the tunnel process exits and every subsequent SSH attempt
+fails against a port nothing is listening on. Retrying only the SSH loop cannot
+recover from that. Worse, a *leftover* tunnel from an earlier session keeps
+`localhost:2222` answering, which masks the failure until the next clean run.
+Kill any old tunnel, then retry `(start tunnel → probe ssh)` together as a pair,
+several times.
+
+**GPU capacity is not guaranteed.** `ZONE_RESOURCE_POOL_EXHAUSTED` on a T4 in
+`us-central1-a` is routine, not exotic — the start simply fails and the whole
+run with it. Either retry the start on a loop, or fall back to a sibling zone
+(`-b`, `-f`). Decide which before it happens at 2 a.m.
+
+**`gcloud` auth expires mid-cycle, and reauth is interactive-only.** Halfway
+through a run you get:
+
+```
+Reauthentication failed. cannot prompt during non-interactive execution
+```
+
+There is nothing to retry. `gcloud auth login` opens a browser and requires a
+human; no flag makes it headless. An agent that hits this must report the error
+string **verbatim** and hand the `gcloud auth login` step back to the person —
+that is [chapter 10](10-working-with-claude.md)'s "hand back the un-automatable
+part with instructions" rule applied to infrastructure. Guessing at it, or
+silently retrying until the poll times out, converts a thirty-second human
+action into a wasted run and a misleading FAIL.
+
+### 6. The launch line eats two tokens
+
+`+dota_launch_custom_game` consumes the **next two** arguments — the addon,
+then the map:
+
+```powershell
+"+dota_launch_custom_game", $Addon, $Map     # the triple. Nothing goes inside it.
+```
+
+Splice a convar in between and the convar's name becomes the addon name. The
+client starts, loads nothing, prints no complaint, and the run fails on a
+missing `[E2E] WIN` marker twenty minutes later with a console log that gives
+no hint why. Put every `+convar value` pair *before* the triple, and treat the
+triple as atomic.
 
 ## Observation
 
@@ -195,6 +252,44 @@ Two reasons. The control plane polls for `RUN DONE`, so a run that dies without
 writing it hangs the poller for its full timeout. And a failing run is precisely
 when you want the log, the screenshots, and the video most — a rig that only
 produces evidence on success is a rig that produces evidence you did not need.
+
+## Retrieval is not free
+
+Producing the evidence and *having* the evidence are two different problems, and
+the second one is where a green run turns into a phantom failure. Three rules,
+all learned the expensive way.
+
+**The tunnel kills a single `scp` stream at about 59 MB.** Not a flaky link — a
+ceiling. A large artifact (a match recording is easily 190 MB) transfers happily
+and then dies with `ConnectionReconnectTimeout`, and retrying the whole file
+dies at the same offset every time. The fix is to never ask for that much in one
+stream:
+
+1. On the VM, split the file into parts of 40 MB or less. Stage this as a real
+   `.ps1` **file** and run it — inline PowerShell over SSH mangles `$` variables
+   through two layers of quoting, and you will spend longer debugging the
+   one-liner than writing the script.
+2. `scp` each part on its own, verifying that part's byte size and retrying just
+   that part on mismatch.
+3. Reassemble locally, then verify the total.
+
+**Verify the size of every pull, because `scp` truncates behind a masked exit
+code.** A 61 MB recording arrived as 16 MB with exit status 0. Nothing anywhere
+said so; the video simply ended in the middle of the match, which reads exactly
+like a crash you then go hunting for. This is the same rule as §4, applied one
+leg further out: *the verdict is a marker contract, not an exit code* — and a
+retrieved artifact is not retrieved because the transfer command returned zero.
+Compare bytes. Accept local ≥ remote: the remote size is sampled while the
+writer may still be flushing, so a locally-larger file is normal and a
+locally-smaller one is a truncation.
+
+**Scan pulled logs with `grep -a`.** Dota's `console.log` carries stray control
+bytes. macOS BSD `grep` decides it is binary, reports zero matches and exits 1,
+and says nothing about why — with `-c` there is not even a "binary file matches"
+line to notice. A perfectly green run then censuses as all zeros and you go
+debugging a game that was working. Every marker census on a pulled log uses
+`grep -a`. Make it the only form that appears in your scripts, so nobody has to
+remember.
 
 ## Modes
 

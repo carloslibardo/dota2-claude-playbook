@@ -16,7 +16,7 @@ Four tiers, each answering a question the one below it cannot.
 | 1. Unit | any laptop, CI | Is the decision logic right? | seconds |
 | 2. Headless e2e | Windows GPU VM | Does the game actually run? | ~25 min end to end, real money |
 | 3. Manual playtest | your machine + Dota | Is it any good? | your evening |
-| 4. Evidence review | frames from tier 2 | Can the player *see* it? | minutes, after tier 2 |
+| 4. Evidence review | frames from tier 2 | Can the player *see* it? Is this the game? | minutes, after tier 2 |
 
 Archer Wars finished its build at 375 unit tests across 47 files at tier 1, and
 the adversarial review described in chapter 11 took it to 705 across 63 — the
@@ -333,6 +333,25 @@ three for a cold VM boot, ten to sync and compile, thirteen for the recorded
 match — and it costs real money, so it is not a per-commit gate; it is a
 per-feature and pre-release gate.
 
+One caveat about what a tier-2 run *proves*, learned on the Pudge Wars port
+(2026-07-27). That rig came up before the game's own `.vmap` existed, so it ran
+on the stock Dota map — a legitimate and useful choice, because it got the
+mechanics under test weeks earlier than waiting for the map would have. Eleven
+runs later every marker was green on that map and the game was still wrong:
+melee brawling in the middle of a jungle, because a Pudge Wars without two
+fields and a river between them is not Pudge Wars.
+
+> **A vanilla-map smoke is a bootstrap, not a deliverable.** It proves the code
+> paths fire in-engine. It cannot prove the game exists, because the arena is
+> half of the game and the arena is not under test. Say so out loud in the run's
+> report, and treat "port the real map into the rig" as a blocking item rather
+> than a polish item.
+
+The general form: name what your harness has *substituted* for the real thing —
+stock map, stock hero, placeholder particle, fake client instead of a player —
+because every substitution is a region the green run says nothing about, and the
+green run will not mention it on its own.
+
 ## Tier 4 — evidence review
 
 The unusual one, and the one this project would argue hardest for.
@@ -362,6 +381,52 @@ The mechanics:
 This is genuinely not automatable, and the attempt to automate it is how the
 invisible-particle class of bug ships. It is also not expensive: the frames
 already exist, and reading forty of them takes a couple of minutes.
+
+### The whole-match question: is this the game?
+
+Everything above is per-feature. The frame strip proves the fire arrow looks
+like fire, the hook visibly drags, the panel is not covered. Run the whole set
+and you can end up where Pudge Wars ended up on run 11 (2026-07-27): every
+per-feature gate green, every effect rendering, hooks latching, rot ticking, a
+win declared — and the reviewer watched the video and rejected it. Two Pudges
+were brawling in melee in the middle of a stock Dota jungle. There was no river.
+There were no fields. The fight was happening in the wrong place, in the wrong
+shape, for the wrong reasons, and not one marker in the contract was capable of
+noticing, because **markers measure mechanics, not shape.**
+
+So tier 4 has a second question stacked on top of the first, and it is asked
+once per recorded run rather than once per feature:
+
+> Per feature: **can the player see it?**
+> Per run: **is this the game?**
+
+The second question has a specific procedure, and the procedure is the load-
+bearing part:
+
+**Judge the strip, not a frame.** The whole match window, one frame per ~3s,
+read in order, start to finish. Run 11's original "review" was three hand-picked
+frames — each of which was fine. Hand-picked frames answer "is something on
+screen?", which is not the question. Only a strip across the entire match shows
+where the players spent the match, whether the map ever gets used, whether the
+thing on screen resembles the game named in the design doc.
+
+**The verdict is holistic and it is allowed to be a rejection with all gates
+green.** "Every gate passed and this is not the game" is a valid, common, and
+extremely valuable outcome. What comes out of it is never a test fix; it is
+design work no marker could have demanded — for Pudge Wars, an uncrossable
+river, bank-hold bot behaviour, and a generated traditional arena, none of which
+any assertion in the contract was asking for.
+
+**It is the escalation of this playbook's own thesis, applied to itself.** The
+book's argument is that log-level evidence lies about the effect level. The same
+argument runs one rung higher: effect-level evidence lies about the *game*
+level. A build can be correct in every part and wrong as a whole, and the only
+instrument that detects it is a human-or-agent reading a full-match strip and
+answering one unforgiving question.
+
+Run 12, after the design changes the question forced: the strip shows two green
+fields, a wide river, five Pudges holding each bank, and hooks crossing the water
+with dragged victims. That is the game. Same gates, same markers, same green.
 
 The discipline that makes it work is writing the **marker contract first**. A
 spec's `contracts/` directory names the exact strings the run will print and the

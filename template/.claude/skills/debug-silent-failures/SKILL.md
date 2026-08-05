@@ -29,6 +29,10 @@ seventeen stories behind it.
 | **Addon does not load**, "loop or previous error loading module" | A `require` cycle: a variant imported from inside its base module instead of after it, from the entry file (L8) |
 | **My new ability/modifier does nothing, no error** | Not imported from `GameMode.ts` — the decorator never ran, so the class does not exist. Then: KV block name ≠ class name |
 | **Particle/effect invisible** | Not precached (L3/L12), or the particle path is a renamed/removed engine asset. Both render nothing and report nothing |
+| **Modifier applies (`HasModifier` true) but no callback ever runs** | The name collides with a stock hero's engine modifier — the C++ built-in wins and your Lua class is inert (L26). Rename with a distinguishing infix |
+| **World FX green in the logs, absent on every frame** | Created before any client connected — particles network only to clients present at creation (L27). Move creation to `GAME_IN_PROGRESS` and print a draw marker |
+| **Particle path correct AND precached, still never renders** | The asset needs engine-internal CP state no script can drive (`pudge_meathook`, `rattletrap_hookshot`) — L28. Swap to a panel-verified CP-drivable particle (`wisp_tether`, `razor_static_link_beam`, `batrider_flaming_lasso`) |
+| **Bot e2e run: zero casts of anything** | Abilities are at level 0 and uncastable; ability points do not spend themselves. The harness needs a leveling loop plus an XP boost at the horn |
 | **Player got a random stock hero** | A custom hero name that does not resolve; selection timed out (L2). Base names only |
 | **"unit ... is invalid" on spawn** | Un-precached hero or unit |
 | **Bots stand still forever** | Heroes resolved with `GetSelectedHeroEntity` (nil for assigned heroes, all match — L5), or a think that returned nothing and silently died |
