@@ -1,6 +1,6 @@
 # 11. The Failure Casebook
 
-Twenty failures, told properly.
+Twenty-one failures, told properly.
 
 [Chapter 4](04-landmines.md) is the terse version — the landmine list, each entry a symptom, a
 cause and a mechanical fix, written to be scanned in five minutes when something is broken.
@@ -838,6 +838,69 @@ the fix is not complete until a marker records the timing. Moving the call fixed
 
 ---
 
+## F21 — The red that meant nothing
+
+**Story.** Every other failure in this book is a green that meant nothing. This is the
+opposite, and it turned out to cost more per occurrence.
+
+Pudge Wars, run 41. The smoke rig came back red on one line:
+
+```
+SMOKE FAIL: no [DODGE] -- the reflex layer is dead code (spec 009)
+```
+
+The reflex layer was not dead code. Grepping the console log for the *other* dodge action
+found four casts in that match. The layer had fired every time it should have; it had chosen
+Vanish rather than the sidestep on all four occasions, and the Vanish branch printed no
+`[DODGE]` line at all. The gate read one of the two branches and concluded the feature did
+not exist.
+
+**The wrong turn was pre-paid.** The previous run, 40, had failed the *opposite* gate —
+`vanish never used` — because Vanish required a threat, a passed dodge roll, and the bot's own
+hook to be on cooldown all at once, and in a match with only six dodge events that coincidence
+never occurred. The fix widened the Vanish condition. It widened it too far, in a way that was
+invisible in the diff:
+
+```ts
+vanish.IsFullyCastable() && (!hook || !hook.IsFullyCastable() || this.tick % 2 === 0)
+```
+
+The intent was "alternate on tick parity." The effect was "always Vanish": that match fired
+129 hooks, so the own-hook-down clause was true nearly every tick and short-circuited the
+`||` before parity was ever read. Two runs, two gates, the same feature, and each fix broke
+the other gate — the [chapter 7](07-testable-bots.md) rule about re-judging a behaviour fix
+against the *full* gate set, learned again at full price.
+
+Under that sat the more interesting error. Even with the short-circuit removed, tick parity
+was the wrong instrument. Dodge events are rare — four to six in a 25-kill match — and they
+are not spread evenly; they cluster inside the few ticks of a hook volley, which is to say
+they correlate with the very clock the split was sampling. A 50/50 rule sampled four times, on
+a clock tied to the event, can hand every event to one side.
+
+**The fix.** Both branches print `[DODGE]` now, and the two actions alternate on a
+match-global counter, sidestep first — which guarantees one of each given two dodge events,
+where the probability guaranteed nothing at n=4.
+
+> **Rule.** A gate's true subject is the union of the markers underneath it, not the feature
+> you had in mind. Add a branch to a gated behaviour and you have silently narrowed every gate
+> above it — and the failure will be a *false red*, which is worse than a false green, because
+> it sends you to debug working code with the failure text naming the wrong subsystem.
+
+> **Rule.** When a run must observe both outcomes of a choice, schedule the choice, don't
+> sample it. A counter guarantees coverage at n=2; a probability only promises a distribution,
+> and a rare event never delivers the samples that promise is denominated in.
+
+There is a third, smaller rule, and it is the one that decided how long the day took. That
+failure string was half observation, half diagnosis: `no [DODGE]` was true and would have led
+straight to the marker gap; `the reflex layer is dead code` was an inference the gate had no
+standing to make, and it pointed at the one subsystem that was working. **A gate reports an
+absence, not a cause** — it will otherwise eventually be wrong in the most expensive way
+available to it: confidently, in the single line a human reads.
+
+> Mechanical fix: [chapter 7, §7.9](07-testable-bots.md).
+
+---
+
 <a id="sidebar2"></a>
 ## The second sidebar: four more from the second game
 
@@ -854,7 +917,7 @@ Same shape as F14, different codebase. Each of these cost a run or a rejected de
 
 ## Reading the casebook as a whole
 
-Sorted by underlying cause rather than by symptom, the twenty collapse into seven families:
+Sorted by underlying cause rather than by symptom, the twenty-one collapse into seven families:
 
 **Silent no-ops (F1, F6, F10, F11, F18, F20, and half of both sidebars).** The engine accepted
 the call and did nothing. This is the dominant hazard class in game work and the reason
@@ -871,9 +934,14 @@ symptoms, one fix shape.
 
 **Platform gaps (F9).** The rig and the player were not running the same Lua.
 
-**Evidence pipeline (F11, F12, F13).** The proof machinery was aimed at the wrong thing, and no
-amount of re-running it would have said so. F20 is a silent no-op by cause but it was caught
-here, the same way F11 was: two green runs, one human watching the video.
+**Evidence pipeline (F11, F12, F13, F21).** The proof machinery was aimed at the wrong thing, and
+no amount of re-running it would have said so. F20 is a silent no-op by cause but it was caught
+here, the same way F11 was: two green runs, one human watching the video. F21 is this family
+running in reverse and belongs in it for that reason: the machinery was still aimed wrong, but
+instead of blessing a broken feature it condemned a working one, and it named a subsystem while
+doing it. Everything else in this book teaches you to distrust a green. F21 is the entry that
+says the red is a measurement too — check what the gate actually reads before you believe what
+it says.
 
 **Two copies that must agree (F15, F16, F17).** A wire value and the Lua that reads it; the
 engine's model of a purchase and the handler's model of it; a KV file and the TypeScript table
