@@ -2,7 +2,11 @@
 
 A playbook, a working boilerplate, and an autonomous test rig — extracted from
 [Archer Wars](https://github.com/carloslibardo/archer-wars), a full-scale Dota 2
-custom game built with Claude Code.
+custom game built with Claude Code, and then tested by building a second game,
+[Pudge Wars](https://github.com/carloslibardo/pudge-wars), from nothing but what
+is in this repo. That second game is
+[published and playable](https://steamcommunity.com/sharedfiles/filedetails/?id=3778117052),
+and the things it caught that this playbook had not written down are in here too.
 
 Three things live here:
 
@@ -95,7 +99,12 @@ The **landmine catalog**, the **evidence-based process**, and the **VM rig** are
 the parts that did not exist anywhere. That is where the value is, and the
 chapters are weighted accordingly.
 
-## The worked example
+## The worked examples
+
+There are two, and they play different roles. The first is where this came
+from; the second is what happened when someone tried to use it.
+
+### Archer Wars — the source
 
 [Archer Wars](https://github.com/carloslibardo/archer-wars) is the full-scale
 reference: a ten-player skillshot free-for-all, seven classes, twenty items,
@@ -112,6 +121,35 @@ Three things there are worth reading directly:
   frame review, with the marker contract written down in `contracts/`.
 - `CLAUDE.md` — the invariants file, and the model for how to hand an agent
   everything the codebase learned the hard way.
+
+### Pudge Wars — the test of this playbook
+
+[Pudge Wars](https://github.com/carloslibardo/pudge-wars) is the more useful
+example, because it is the one that could fail. It was built a month later, from
+this template, by an agent following these chapters as written — a two-team
+hook-fantasy arena where a landed hook is a kill — and it is
+[published and playable](https://steamcommunity.com/sharedfiles/filedetails/?id=3778117052).
+
+The interesting output was not the game. It was the list of things that went
+wrong anyway. A project that had already read every word of chapter 4 still lost
+runs to a modifier name it was not allowed to reuse, particles created fifteen
+seconds before anyone was connected to see them, and a gate that reported dead
+code about a working subsystem. Those became landmines **L26–L33**, casebook
+entries **F18–F21**, and two more bot pathologies in chapter 7 — all of them
+written *after* someone paid for them a second time.
+
+Worth reading directly:
+
+- `docs/PLAYBOOK-NOTES.md` — the running field report, written as the runs
+  happened rather than reconstructed afterwards. This is the raw material every
+  v1.1+ chapter edit came from.
+- `CLAUDE.md` — the invariants file as it looks after 42 verification runs, each
+  entry dated to the run that bought it.
+- `scripts/vm.sh` and `scripts/vm-smoke.ps1` — the testrig here, adapted to a
+  second game, which is the honest measure of whether the rig generalizes.
+
+Read it alongside the failure casebook. Chapter 11 tells those stories properly;
+the repo is where you can check them.
 
 ## License
 

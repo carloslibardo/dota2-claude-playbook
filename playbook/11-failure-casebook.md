@@ -14,12 +14,16 @@ pipelines three times in a row.
 
 Where a failure has a mechanical counterpart in the landmine list, we say so.
 
-One note on provenance. F1 through F17 were bought building Archer Wars, the ten-player
-free-for-all this playbook was extracted from. F18 through F20 come from Pudge Wars — a second
-game, built on the same rig a month later, by an agent following this playbook as written. That
-is the more uncomfortable set, because those three were paid for by a project that had already
-read every word of this chapter, and they still cost five red runs, a rejected video and an
-afternoon of re-deriving what "passing" meant.
+One note on provenance. F1 through F17 were bought building
+[Archer Wars](https://github.com/carloslibardo/archer-wars), the ten-player free-for-all this
+playbook was extracted from. F18 through F21 come from
+[Pudge Wars](https://github.com/carloslibardo/pudge-wars) — a second game, built on the same rig
+a month later, by an agent following this playbook as written. That is the more uncomfortable
+set, because those four were paid for by a project that had already read every word of this
+chapter, and they still cost six red runs, a rejected video, an afternoon of re-deriving what
+"passing" meant, and one day spent debugging a subsystem that turned out to be working. Both
+repos are public, so every story here can be checked against the code and the commit that fixed
+it.
 
 ---
 
