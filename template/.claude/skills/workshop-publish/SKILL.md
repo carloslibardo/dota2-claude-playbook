@@ -1,6 +1,6 @@
 ---
 name: workshop-publish
-description: Use when publishing or updating the game on the Steam Workshop — the cook-then-upload path, the steamcmd recipe that creates the item headlessly, and the four things that genuinely still need a human (including the one GUI pass that tags the item into the Arcade)
+description: Use when publishing or updating the game on the Steam Workshop — the cook-then-upload path, the steamcmd recipe that creates the item headlessly, the steps that still need a human, and the one route that can actually set the Arcade tags
 ---
 
 # Workshop publish
@@ -72,14 +72,20 @@ C:\steamcmd\steamcmd.exe +login <account> +workshop_build_item C:\path\to\<addon
   non-interactively over SSH.
 - The **Workshop Legal Agreement**, accepted on steamcommunity.com by the owning
   account. An upload from an account that never accepted it does not take.
-- **One GUI republish to set the item's TAGS.** An item created headlessly has
-  an empty tag set, and an untagged custom game is **invisible in the Arcade
-  browse and search** — public, playable by direct link, findable by nobody.
-  `steamcmd` has no tag argument; the Workshop web edit page and the
-  published-file API will not set the Dota game tags either. One publish from
-  the Workshop Tools publisher GUI does, and later `steamcmd` updates preserve
-  the tags. **The automation ceiling is exactly one GUI pass per item, not
-  zero** — budget it, and do not report a headless create as "published".
+- **A tagging pass — scriptable, but only one route works.** An item created
+  headlessly has an empty tag set, and an untagged custom game is **invisible in
+  the Arcade browse and search** — public, playable by direct link, findable by
+  nobody. Do not report a headless create as "published". Routes that DO NOT
+  work: `steamcmd` (no tag argument, a vdf `tags` block is silently ignored), the
+  Workshop web edit page (no tag UI for app 570), `IPublishedFileService/Update`
+  (401, publisher-key only). The route that DOES: the **Steamworks flat API**
+  against a running, logged-in Steam client — `StartItemUpdate(appid, id)` →
+  `SetItemTags([...])` → `SetItemVisibility(...)` → `SubmitItemUpdate`, callable
+  from any language with a C FFI (thirty lines of Python `ctypes` against the
+  `libsteam_api` in the game's own install). Metadata-only: content, preview and
+  description are untouched. Later `steamcmd` updates preserve the tags. The
+  prerequisite is a machine with the Steam client logged in as the owning
+  account — a constraint on *where* the step runs, not a human click.
 - The **store presentation** — preview image, description.
 
 ## Release gate before you flip it public
@@ -91,7 +97,8 @@ C:\steamcmd\steamcmd.exe +login <account> +workshop_build_item C:\path\to\<addon
 - [ ] Frames reviewed for anything visual that changed
 - [ ] `publishedfileid` in the `.vdf` is the real item, not `0`
 - [ ] `steamcmd` invoked by full path, and the item's `timeupdated` actually moved
-- [ ] Tags set (once, via the GUI publisher) — or the game is unfindable in the Arcade
+- [ ] Tags set (once, via the Steamworks flat API from a logged-in client) — or the
+      game is unfindable in the Arcade, and verified by re-reading the item's tags
 - [ ] The uploaded build is the commit you think it is — tag it
 
 `.github/workflows/release.yml` in this template is the skeleton, disabled by

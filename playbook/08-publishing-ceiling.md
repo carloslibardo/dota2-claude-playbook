@@ -110,13 +110,14 @@ thought we had:
 - **The visibility flip.** Create the item hidden (`"visibility" "2"`), verify
   it, and only then make it public, deliberately. Treat this as a feature: you
   do not want a first upload landing in front of an audience.
-- **One GUI republish, to set the item's tags.** An item created headlessly has
-  **no tags at all**, and an untagged Dota custom game does not appear in the
-  Arcade browse or search lists — it exists, it is public, and nothing but a
-  direct link reaches it. `steamcmd` has no tag field, and neither the Workshop
-  web page nor the published-file API will set the Custom Game tag. One publish
-  from the Workshop Tools publisher GUI does. See the second correction note
-  below; this one is not a preference, it is a hole.
+- **A separate pass to set the item's tags — scriptable, but not by any of the
+  routes you will try first.** An item created headlessly has **no tags at all**,
+  and an untagged Dota custom game does not appear in the Arcade browse or search
+  lists: it exists, it is public, and nothing but a direct link reaches it.
+  `steamcmd` has no tag field, the Workshop web page offers no tag UI for app 570,
+  and the published-file API rejects them. What does work is the **Steamworks flat
+  API against a locally running Steam client** — see the third correction note
+  below. It is a real step with a real prerequisite, but it is not a GUI step.
 
 The first three are not things you would want automated anyway — a legal
 agreement acceptance is meant to be a human action, and a first public release
@@ -196,7 +197,7 @@ succeeded by hand will fail in a way you cannot debug from a runner log.
 | Map cook + addon assembly | ⚠️ scriptable | `resourcecompiler`, Windows only |
 | **First Workshop publish** | ⚠️ **scriptable** | `C:\steamcmd\steamcmd.exe +workshop_build_item`, `publishedfileid 0` |
 | Legal agreement + visibility flip | ❌ **manual** | steamcommunity.com, owning account |
-| **Tags (= Arcade visibility)** | ❌ **manual, once per item** | Workshop Tools publisher GUI — nothing else can set them |
+| **Tags (= Arcade visibility)** | ⚠️ **scriptable, once per item** | Steamworks flat API (`SetItemTags`) against a logged-in Steam client — steamcmd, the web page and the published-file API all cannot |
 | Subsequent updates | ⚠️ self-hosted only | `publish.ps1` / `release.yml` |
 
 Ship a table like this in your own repo. Setting correct expectations is the
@@ -254,13 +255,60 @@ succeeded at nothing, and once when a real upload succeeded at producing an
 unfindable item. The evidence tier for publishing is not the upload log. It is
 searching for your own game from a client you did not publish it with.
 
+## A third note, and the chapter's real lesson about itself
+
+This chapter has now been wrong twice in the same direction, and the second time
+it was wrong *in a correction*.
+
+The note above concluded "exactly one GUI pass per item, not zero," on the
+strength of having tried `steamcmd`, the Workshop web page and the published-file
+API. That survey was accurate and the conclusion did not follow from it: three
+routes failing is evidence about three routes. The fourth route works. Tags and
+visibility can both be set through the **Steamworks flat API**, driven against the
+Steam client already running on your machine:
+
+```
+StartItemUpdate(570, itemId) -> SetItemTags(["Custom Game"])
+                             -> SetItemVisibility(public)
+                             -> SubmitItemUpdate
+```
+
+It is a metadata-only update — content, preview and description are untouched —
+and it authenticates off the client's cached session, so there is no password and
+no publisher key involved. Any language with a C FFI can call it; ours was thirty
+lines of Python `ctypes` against the `libsteam_api` shipped inside the game's own
+install. The prerequisite is real and worth stating plainly: a machine with the
+Steam client running and logged in as the owning account. That is a different
+constraint from "a human must click," and it is the difference between a step your
+pipeline performs and a step your pipeline waits on.
+
+So the ceiling is **zero GUI passes**, with one caveat: the tagging step needs a
+logged-in client rather than a bare `steamcmd`.
+
+The more useful lesson is about the shape of the two mistakes, because they are the
+same mistake. Both times, the chapter tested every route it could think of, found
+them all closed, and wrote down *"this is impossible"* when the honest claim was
+*"I could not find a way."* The first is a fact about the platform; the second is a
+fact about the search. They are not interchangeable, and only one of them stays true
+after someone else looks.
+
+> When you write down a ceiling, write down the routes you tried, not the verdict
+> you drew from them. A reader can extend a list of attempts. A reader cannot
+> extend "impossible" — they can only believe it, and stop.
+
+That is why both wrong versions are still above this line rather than quietly
+edited away. The list of dead routes is the part that kept its value: `steamcmd`'s
+missing tag field, the app-570 web page redirect and the API's 401 are all still
+true, and they are what told the next attempt where *not* to look.
+
 ## What this means for how you work
 
 The ceiling shapes the process above it. The last steps before an audience sees
-your game are still deliberate human actions — the visibility flip, and the one
-GUI republish that tags the item into the Arcade — and everything before them
-has to be trustworthy, because you cannot iterate your way out of a bad Workshop
-release the way you can with a web deploy.
+your game — the visibility flip and the tagging pass — are both scriptable, but
+treat them as deliberate rather than automatic: they are the two that change what
+strangers can see, and everything before them has to be trustworthy, because you
+cannot iterate your way out of a bad Workshop release the way you can with a web
+deploy.
 
 Which is the argument for the quality gate in
 [chapter 6](06-autonomous-vm-rig.md): if the final step is a human making one
